@@ -1,0 +1,4 @@
+# Predictive Deadlock Profiler (PDP)
+
+**We predict lock-order deadlocks from one run, confirm them, and measure how Linux scheduling decides whether they ever show up.**
+PDP is an `LD_PRELOAD` library (`libpdp.so`) that records every `pthread_mutex_*` and `sem_*` call of an unmodified C program, an analyzer that builds a lock-order graph from that log and finds cycles (potential deadlocks) even when the run did not hang, a confirmer that re-runs the program with targeted delays to show the deadlock is real, and an experiment harness that measures how often the same bug manifests under different Linux scheduling policies, core counts and load. Predict-and-confirm is prior art (GoodLock 2000, DeadlockFuzzer PLDI 2009, Helgrind, ThreadSanitizer, Linux lockdep, ICSE 2020, PLDI 2023); our contribution is the scheduling study. Course project for an Operating Systems class, built with gcc on Linux (WSL2).

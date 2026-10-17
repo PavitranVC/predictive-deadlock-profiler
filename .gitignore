@@ -1,0 +1,13 @@
+*.o
+*.so
+*.log
+/build/
+/bin/
+tests/bin/
+*.pdplog
+__pycache__/
+*.pyc
+report.dot
+report.png
+vgcore.*
+core
