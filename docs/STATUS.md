@@ -10,7 +10,7 @@ Every agent reads this first and updates ONLY its own line.
 - builder: Stage 4 (confirmer + watchdog) in progress
 - experimenter: Stage 5 scripts done, merged; full run pending after Stage 4
 - docs: Stage 3 docs written (stages/stage-3.md, CHANGELOG.md entry, arch/arch-v3.dot+png, VIVA.md through Stage 3); committed.
-- reviewer: Stage 3 reviewed -> docs/reviews/stage-3.md; 3 MUST-FIX (suite accepts hangs from gate/philo_ordered, no single-cycle/distinct-name checks, race mode biased by thread-start stagger: decide on start barrier), 6 SHOULD-FIX, 11 NIT.
+- reviewer: Stage 4 reviewed -> docs/reviews/stage-4.md; 4 MUST-FIX (watchdog self-cycle false positive on signalling sems, same on recursive mutex, no watchdog negative tests, exit 42 alone trusted as deadlock), 9 SHOULD-FIX, 12 NIT.
 
 ## Blockers
 - (none)
