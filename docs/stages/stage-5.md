@@ -1,11 +1,11 @@
-# Stage 5 — Experiment harness and results (how often does the bug show up?)
+# Stage 5: Experiment Harness and Results (How Often Does the Bug Show Up?)
 
 Status: full run done (10,800 runs, 0 errors) on a cloud VM. The same matrix was then rerun on WSL2 (the course platform) with randomised block order; see "WSL2 replication" below. Scripts merged from the parallel session
-(branch `ccr-b8583290-l43ezk-experiments`, commit `e969aba`, merge `7e357a9`); review in `docs/reviews/stage-5-6.md`;
+(written on the experiment branch `ccr-b8583290-l43ezk-experiments`, auto-named by the cloud tool; merged into main and deleted; commit `e969aba`, merge `7e357a9`); review in `docs/reviews/stage-5-6.md`;
 review fixes applied to the scripts afterwards. **The full run used the pre-fix `run_experiment.sh`** (see "Honest
 caveats"). Source: `scripts/run_experiment.sh`, `scripts/overhead.sh`, `scripts/helgrind.sh`, `scripts/plot.py`,
-`scripts/runtime_ns.py`, `scripts/README.md`. Data: `results/manifest.csv`, `results/overhead.csv`,
-`results/helgrind.csv`, `results/env.txt`. Charts: `results/hangrate_*.png`, `results/overhead.png`.
+`scripts/runtime_ns.py`, `scripts/README.md`. Data: `results/cloud/manifest.csv`, `results/cloud/overhead.csv`,
+`results/cloud/helgrind.csv`, `results/cloud/env.txt`. Charts: `results/cloud/hangrate_*.png`, `results/cloud/overhead.png`.
 
 ## What was built
 
@@ -14,7 +14,7 @@ often does the bug actually show up on a real machine, and what changes that rat
 
 1. **`run_experiment.sh`**: runs each real-deadlock test program (`bank`, `sem_sq`, `philo_naive`) natively, with no
    `LD_PRELOAD`, in `race` mode with `ITER=1000`. A run that is still alive after `TIMEOUT_S` seconds is counted as
-   **hung**. Each run is one row in `results/manifest.csv`. It varies three factors: scheduler (`default`, `fifo50`
+   **hung**. Each run is one row in `results/cloud/manifest.csv`. It varies three factors: scheduler (`default`, `fifo50`
    = `chrt -f 50`, `rr50` = `chrt -r 50`), core set (`taskset -c 0`, `0-1`, `0-3`), and load (`idle`, or `loaded` =
    one busy bash loop per core in the same core set).
 2. **`overhead.sh`**: runs the clean programs `philo_ordered` and `gate` twice per pair, once plain and once with
@@ -39,7 +39,7 @@ often does the bug actually show up on a real machine, and what changes that rat
   (z = 1.96) instead of the normal (Wald) interval. Wald gives a zero-width interval at 0/200 and 200/200, which is
   wrong; Wilson stays honest at the ends. Reference values checked in review: 0/10 gives [0, 0.2775], 5/10 gives
   [0.2366, 0.7634].
-- **Machine.** `results/env.txt`: cloud VM (`uname` machine `vm`, kernel 6.18.44-fc-v139), 4 vCPUs, `wsl: no`,
+- **Machine.** `results/cloud/env.txt`: cloud VM (`uname` machine `vm`, kernel 6.18.44-fc-v139), 4 vCPUs, `wsl: no`,
   `container: no`, `stress_ng: none` (the load is bash busy loops), 200 runs per cell, `timeout_s: 1`, `iter: 1000`.
 
 ## Results: hang rate per binary (hung %, with Wilson 95% CI)
@@ -60,7 +60,7 @@ Each cell is 200 runs. "idle" is the test alone; "loaded" is the test with one b
 | rr50 | 0-1 | 71.0 [64.4, 76.8] | 99.0 [96.4, 99.7] |
 | rr50 | 0-3 | 95.0 [91.0, 97.3] | 100.0 [98.1, 100.0] |
 
-![bank hang rate](../../results/hangrate_bank.png)
+![bank hang rate](../../results/cloud/hangrate_bank.png)
 
 ### sem_sq
 
@@ -76,7 +76,7 @@ Each cell is 200 runs. "idle" is the test alone; "loaded" is the test with one b
 | rr50 | 0-1 | 74.5 [68.0, 80.0] | 100.0 [98.1, 100.0] |
 | rr50 | 0-3 | 93.5 [89.2, 96.2] | 99.5 [97.2, 99.9] |
 
-![sem_sq hang rate](../../results/hangrate_sem_sq.png)
+![sem_sq hang rate](../../results/cloud/hangrate_sem_sq.png)
 
 ### philo_naive (5 philosophers, naive fork order)
 
@@ -92,7 +92,7 @@ Each cell is 200 runs. "idle" is the test alone; "loaded" is the test with one b
 | rr50 | 0-1 | 43.5 [36.8, 50.4] | 72.5 [65.9, 78.2] |
 | rr50 | 0-3 | 65.5 [58.7, 71.7] | 98.5 [95.7, 99.5] |
 
-![philo_naive hang rate](../../results/hangrate_philo_naive.png)
+![philo_naive hang rate](../../results/cloud/hangrate_philo_naive.png)
 
 ## Key findings
 
@@ -142,7 +142,7 @@ threads meeting in the right phase.
 | philo_ordered | 10000 | 7.7 us | 7.9 ms | 775.2 ms | 99x |
 | philo_ordered | 100000 | 9.0 us | 64.3 ms | 9056 ms | 141x |
 
-![overhead](../../results/overhead.png)
+![overhead](../../results/cloud/overhead.png)
 
 So the median cost is **about 7 to 11 us per lock operation**, and the wall-time slowdown is **18x to 141x**. The
 slowdown is large because these programs do almost nothing but lock. A real program that does real work between locks
@@ -157,7 +157,7 @@ step, and it is not built.
 ## Helgrind baseline
 
 Helgrind (Valgrind's thread checker, `valgrind --tool=helgrind`) reports lock-order violations when it runs the program
-under its own analysis. We ran it on the same binaries (`results/helgrind.csv`):
+under its own analysis. We ran it on the same binaries (`results/cloud/helgrind.csv`):
 
 | binary | ground truth | Helgrind: lock-order violation reported | PDP (Stages 2–4) |
 |---|---|---|---|
@@ -358,7 +358,7 @@ Medians over the 50 pairs per cell. Each value is the median `ns_per_lock_op` of
 
 ### Helgrind
 
-Identical on both platforms (`results/wsl2/helgrind.csv` and `results/helgrind.csv`).
+Identical on both platforms (`results/wsl2/helgrind.csv` and `results/cloud/helgrind.csv`).
 
 | binary | ground truth | Helgrind lock-order report | PDP |
 |---|---|---|---|

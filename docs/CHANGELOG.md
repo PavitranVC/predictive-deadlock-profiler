@@ -2,14 +2,14 @@
 
 All notable changes to PDP, one entry per stage. Newest stage last.
 
-## Stage 0 — scaffolding (2026-10-17, commit `59aac05`)
+## Stage 0: Scaffolding (2026-10-17, commit `59aac05`)
 
 - Project README: goal, prior art, and the planned pipeline (interceptor, analyzer, confirmer, experiment harness).
 - `.gitignore`, status board `docs/STATUS.md`.
 - Agent definitions under `.claude/agents/` (builder, reviewer, docs, experimenter) with role rules. The orchestrator is the
   main session, not a file; it has no definition under `.claude/agents/`.
 
-## Stage 1 — LD_PRELOAD interceptor (2026-10-17, commits `891e236` WIP, `3b02523` final)
+## Stage 1: LD_PRELOAD Interceptor (2026-10-17, commits `891e236` WIP, `3b02523` final)
 
 - `src/libpdp.so` (`src/libpdp.c`): hooks for `pthread_mutex_lock`, `pthread_mutex_unlock`,
   `pthread_mutex_trylock`, `pthread_mutex_destroy`, `sem_wait`, `sem_post`, resolved with `dlsym(RTLD_NEXT)`.
@@ -25,7 +25,7 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Build: `make`, `make test` (`tests/basic.c`, `tests/overflow.c`, `tests/check_basic.sh`). Passes on gcc 13.3, glibc 2.39.
 - Open: `fork()`, `pthread_atfork`, condvar and timed-lock hooks, semaphore edge rules, spin-loop backoff.
 
-## Stage 2 — analyzer `pdp-analyze` (2026-10-17, commits `a8a3cfb` WIP, `3526c8d` final)
+## Stage 2: Analyzer `pdp-analyze` (2026-10-17, commits `a8a3cfb` WIP, `3526c8d` final)
 
 - `src/analyze.c`: parses `pdp.log` (sorted by `seq`, `held=?` skipped and counted), builds the lock-order graph
   from REQ events (edge = tid, call site, held set, count), lock identity = address + generation (DESTROY).
@@ -42,7 +42,7 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Review fixes (`docs/reviews/stage-2.md`): MUST-FIX 1-4 fixed; SHOULD-FIX 5, 6, 7, 11 fixed; 8, 9 partly; 10 open.
   Details in `docs/stages/stage-2.md`.
 
-## Stage 3 — ground-truth test suite (2026-10-17, commits `7a5b444` WIP, `fd35b2b` review, `09cda59` final, `f0028d3` and `6d99610` docs)
+## Stage 3: Ground-Truth Test Suite (2026-10-17, commits `7a5b444` WIP, `fd35b2b` review, `09cda59` final, `f0028d3` and `6d99610` docs)
 
 - Five test programs in `tests/` with known ground truth: `bank.c` (real 2-cycle), `sem_sq.c` (real 2-cycle on
   binary semaphores S, Q), `gate.c` (opposite order under gate lock `gate_G`, FILTERED), `philo_naive.c` (real
@@ -60,11 +60,11 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Review (`docs/reviews/stage-3.md`, commit `fd35b2b`): 3 MUST-FIX fixed; open items are mode validation, site
   checks in the suite, `pthread_create` return checks, `sem_destroy` in sem_sq (listed in `docs/stages/stage-3.md`).
 - Parallel session: the Stage 5 experiment scripts (`scripts/run_experiment.sh`, `overhead.sh`, `helgrind.sh`,
-  `plot.py`) were written early by the experimenter in a separate session (branch
-  `ccr-b8583290-l43ezk-experiments`, commit `e969aba`) and merged into the main branch (merge `7e357a9`). They are
+  `plot.py`) were written early by the experimenter in a separate session (on the
+  experiment branch, auto-named `ccr-b8583290-l43ezk-experiments`, merged into main and deleted; commit `e969aba`) and merged into the main branch (merge `7e357a9`). They are
   not part of Stage 3 and are not described here beyond this note.
 
-## Stage 4 — confirmer (2026-10-17, commits `73b455e` WIP, `d2b9e15` review, `c8712fb` fixes, `6781836` docs)
+## Stage 4: Confirmer (2026-10-17, commits `73b455e` WIP, `d2b9e15` review, `c8712fb` fixes, `6781836` docs)
 
 - Directed delay injection: `PDP_DELAY_SITE` (comma-separated `module+0xoff` sites) and `PDP_DELAY_US` (default
   100000). A thread that already holds a lock sleeps before requesting a lock from a listed site. Sites come from
@@ -87,20 +87,20 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Known limits: semaphores have no true owner (`src/pdp.h`); a real one-thread relock deadlock is missed; cond_wait and
   timedlock are invisible to the watchdog; a forked child has no watchdog.
 
-## Stage 5 — experiment harness and results (2026-10-17, commits `f0b7c28`, `19d3249`, `e969aba` scripts from the parallel session, `7e357a9` and `b182568` merges, `fe5def7` review, `dfe6a7b` fixes, `9742098` and `1228caa` results, `2c9ade3` docs)
+## Stage 5: Experiment Harness and Results (2026-10-17, commits `f0b7c28`, `19d3249`, `e969aba` scripts from the parallel session, `7e357a9` and `b182568` merges, `fe5def7` review, `dfe6a7b` fixes, `9742098` and `1228caa` results, `2c9ade3` docs)
 
 - Harness: `scripts/run_experiment.sh` (native race runs, no LD_PRELOAD, `ITER=1000`, `TIMEOUT_S=1`, start barrier
   in race mode), `scripts/overhead.sh` (`philo_ordered` and `gate`, baseline vs `LD_PRELOAD`), `scripts/helgrind.sh`,
   `scripts/plot.py` (Wilson 95% intervals), `scripts/runtime_ns.py`.
 - **Full run, 10,800 runs, 0 errors** (3 binaries x 3 schedulers x 3 core sets x idle/loaded x 200 runs), cloud VM
-  (not WSL2), 4 vCPUs, bash busy-loop load. Data: `results/manifest.csv`, `results/env.txt`, charts
-  `results/hangrate_{bank,sem_sq,philo_naive}.png`.
+  (not WSL2), 4 vCPUs, bash busy-loop load. Data: `results/cloud/manifest.csv`, `results/cloud/env.txt`, charts
+  `results/cloud/hangrate_{bank,sem_sq,philo_naive}.png`.
 - Findings (hypotheses marked in `docs/stages/stage-5.md`): 0% on one core for every config; more cores raise the
   rate; load hides the bug under the default scheduler (bank on 2 cores 64.0% to 0.5%) and exposes it under
   SCHED_FIFO and SCHED_RR (bank on 2 cores to 99 to 100%).
 - Overhead: median 6.7 to 11.3 us per lock operation; wall-time ratio 18x to 141x on lock-only microbenchmarks.
-  Results in `results/overhead.csv`, chart `results/overhead.png`.
-- Helgrind baseline (`results/helgrind.csv`): flags bank and philo_naive, misses sem_sq (no semaphore lock-order
+  Results in `results/cloud/overhead.csv`, chart `results/cloud/overhead.png`.
+- Helgrind baseline (`results/cloud/helgrind.csv`): flags bank and philo_naive, misses sem_sq (no semaphore lock-order
   support), flags gate (false positive). PDP catches all three real cycles and filters gate.
 - **Caveat:** the full manifest was produced with the pre-fix `run_experiment.sh` (fixed cell order, not
   block-randomised). The WSL2 rerun uses the fixed script.
@@ -112,7 +112,7 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Still open from the review: `error` column in plot.py, timeout-validity table in plot.py, NIT items.
 - Docs: `docs/stages/stage-5.md`, `docs/arch/arch-v5.dot` and `.png`.
 
-## Stage 6 — live demo (2026-10-17, commits `4a930ec` WIP, `4339dbf` bank_fixed, `fe5def7` review, `dfe6a7b` fixes, `2c9ade3` docs and README)
+## Stage 6: Live Demo (2026-10-17, commits `4a930ec` WIP, `4339dbf` bank_fixed, `fe5def7` review, `dfe6a7b` fixes, `2c9ade3` docs and README)
 
 - `scripts/demo.sh`: build, clean pass, hang with top and gdb, `pdp run` and `pdp analyze` prediction, `pdp confirm`
   with baseline, fixed version, gate-lock filtering, results chart. Pauses per step; `DEMO_NOPAUSE=1` runs straight
@@ -121,13 +121,13 @@ All notable changes to PDP, one entry per stage. Newest stage last.
   INT/TERM trap exits with 130; colours only on a terminal.
 - Docs: `docs/stages/stage-6.md` (step-by-step walkthrough, fallbacks, two-minute viva script).
 
-## Branch — work moved to `main` (2026-10-17)
+## Branch: Work Moved to `main` (2026-10-17)
 
-- Work moved to `main`. `main` was created from `ccr-b8583290-l43ezk` at `2c9ade3`.
-- The experimenter branch `ccr-b8583290-l43ezk-experiments` is fully merged (`7e357a9`, and the fixed scripts in `b182568`).
+- Work moved to `main`. `main` was created from the development branch (`ccr-b8583290-l43ezk`, auto-named by the cloud tool; merged into main and deleted) at `2c9ade3`.
+- The experiment branch (`ccr-b8583290-l43ezk-experiments`, auto-named by the cloud tool) is fully merged (`7e357a9`, and the fixed scripts in `b182568`).
 - Commit references above were checked against the commit list; see `docs/TIMELINE.md` for every commit in order.
 
-## Stage 5 addendum — WSL2 replication (2026-10-17, results commit `4e2e80b`, docs commit pending)
+## Stage 5 Addendum: WSL2 replication (2026-10-17, results commit `4e2e80b`, docs commit `7a6cd5e`)
 
 - `results/wsl2/`: the full matrix on WSL2 (Intel Core Ultra 9 275HX, 22 vCPUs, kernel 6.6 WSL2). 10,800 runs,
   200 per cell, 0 errors. Randomised block order (block 10, seed 3464). Load: `stress-ng --cpu n` pinned to the core
@@ -145,3 +145,11 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Docs: `docs/stages/stage-5.md` (WSL2 replication section), `README.md` (headline results), `docs/VIVA.md` (updated
   answers and questions 54 to 56). No new architecture version: this addendum changes results and docs, not the design,
   so `arch-v5` still applies.
+
+## Repository Tidy-Up (2026-10-17, commit pending)
+
+- Cloud results moved from `results/*.{csv,png,txt}` to `results/cloud/`; WSL2 results (primary) stay in `results/wsl2/`. All path references in the README and docs updated.
+- The auto-generated branches `ccr-b8583290-l43ezk` and `ccr-b8583290-l43ezk-experiments` were merged into `main` and deleted. `main` is the only branch. Docs now call them "the development branch" and "the experiment branch".
+- New `docs/README.md`: documentation index with a recommended reading order.
+- `README.md` rewritten: overview, key features, quick start with real output, results, how it works, layout, limitations, future work.
+- `docs/stages/stage-6.md` now cites the WSL2 numbers, with the cloud as replication. `docs/STATUS.md` marks the project complete. No code changed, so `arch-v5` still applies.

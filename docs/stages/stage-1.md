@@ -1,4 +1,4 @@
-# Stage 1 — LD_PRELOAD interceptor (`libpdp.so`)
+# Stage 1: LD_PRELOAD interceptor (`libpdp.so`)
 
 Status: built and tested (`make && make test` passes). Commit `891e236` (WIP). Source: `src/libpdp.c` (~320 lines), `src/pdp.h`.
 

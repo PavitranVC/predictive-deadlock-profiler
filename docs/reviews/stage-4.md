@@ -1,4 +1,4 @@
-# Stage 4 review: confirmer (delay injection, watchdog, `pdp confirm`)
+# Stage 4 Review: Confirmer
 
 Scope: `git diff HEAD~1 -- src tests Makefile` (commit 73b455e), plus src/pdp.h,
 src/libpdp.c (hooks and table), src/pdp, src/report.c `print_cycle_sites`.

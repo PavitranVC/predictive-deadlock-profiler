@@ -1,4 +1,4 @@
-# How the project was built
+# PROCESS: How the Project Was Built
 
 PDP was built in one day (2026-10-17) by an orchestrator and four role agents, with one parallel session for the experiments. This file explains who did what, the loop each stage went through, and which design decisions the review changed. The commit list is in `docs/TIMELINE.md`.
 
@@ -37,13 +37,13 @@ Every agent reads `docs/STATUS.md` first and updates only its own line. This is 
 
 ## The parallel experiment session
 
-The Stage 5 experiment scripts were written by the experimenter in a separate Claude session, on its own branch `ccr-b8583290-l43ezk-experiments`, while the main line built Stages 2 and 3. That session wrote `scripts/run_experiment.sh`, `overhead.sh`, `helgrind.sh` and `plot.py` (`f0b7c28`, `19d3249`, `e969aba`), then ran the full experiment: **10,800 runs** on a cloud VM with 4 vCPUs (3 binaries x 3 schedulers x 3 core sets x idle or loaded x 200 runs), with 0 errors.
+The Stage 5 experiment scripts were written by the experimenter in a separate Claude session, on the experiment branch (`ccr-b8583290-l43ezk-experiments`, auto-named by the cloud tool; merged into main and deleted), while the main line built Stages 2 and 3. That session wrote `scripts/run_experiment.sh`, `overhead.sh`, `helgrind.sh` and `plot.py` (`f0b7c28`, `19d3249`, `e969aba`), then ran the full experiment: **10,800 runs** on a cloud VM with 4 vCPUs (3 binaries x 3 schedulers x 3 core sets x idle or loaded x 200 runs), with 0 errors.
 
 The two branches were merged twice:
-- `7e357a9`: the experimenter branch merged into the main line, so the scripts were in the repo before Stage 3 finished.
+- `7e357a9`: the experiment branch merged into the main line, so the scripts were in the repo before Stage 3 finished.
 - `b182568`: a merge of the fixed scripts (from the Stage 5/6 review fixes, `dfe6a7b`) from the main line, so the later results (`1228caa`) came from the fixed script.
 
-Work moved to `main` at `2c9ade3`. The experimenter branch is fully merged.
+Work moved to `main` at `2c9ade3`. The experiment branch is fully merged and deleted; `main` is the only branch.
 
 ## Design decisions changed by review
 

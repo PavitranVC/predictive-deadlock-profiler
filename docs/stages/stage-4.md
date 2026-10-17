@@ -1,4 +1,4 @@
-# Stage 4 — Confirmer (delay injection, watchdog, `pdp confirm`)
+# Stage 4: Confirmer (delay injection, watchdog, `pdp confirm`)
 
 Status: built, `make && make test` passes (per the builder's status line). Commits: `73b455e` (WIP build), `d2b9e15`
 (reviewer report `docs/reviews/stage-4.md`), `c8712fb` (review fixes, negative tests, DEADLOCK-line check). Source:

@@ -1,4 +1,4 @@
-# Stage 1 review — LD_PRELOAD interceptor
+# Stage 1 Review: LD_PRELOAD Interceptor
 
 Reviewer: reviewer agent. Date: 2026-10-17. Scope: `src/pdp.h`, `src/libpdp.c`, `Makefile`,
 `tests/basic.c`, `tests/check_basic.sh`.

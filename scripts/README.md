@@ -4,10 +4,10 @@ All scripts are bash/python3, read binaries from `tests/bin/` (override with `BI
 
 | Script | Purpose | Output |
 |---|---|---|
-| `run_experiment.sh` | Run each real-deadlock binary (`bank sem_sq philo_naive`, list at top of script) with **no** LD_PRELOAD and no delay injection, over scheduler x cores x load. A run that outlives `timeout 5` (exit 124) = deadlock manifested. | `results/manifest.csv`, `results/env.txt` |
-| `overhead.sh` | Wall time of clean binaries (`philo_ordered gate`) with vs without `LD_PRELOAD=build/libpdp.so` | `results/overhead.csv` |
-| `helgrind.sh` | `valgrind --tool=helgrind` on the 5 binaries in `BINS` (bank sem_sq philo_naive gate philo_ordered); does it print "lock order"? | `results/helgrind.csv`, `results/helgrind/*.log` |
-| `plot.py` | Hang-rate charts with 95% Wilson CIs, overhead chart, summary table on stdout | `results/hangrate_<binary>.png`, `results/overhead.png` |
+| `run_experiment.sh` | Run each real-deadlock binary (`bank sem_sq philo_naive`, list at top of script) with **no** LD_PRELOAD and no delay injection, over scheduler x cores x load. A run that outlives `timeout $TIMEOUT_S` (exit 124) = deadlock manifested. | `$OUT_DIR/manifest.csv`, `$OUT_DIR/env.txt` |
+| `overhead.sh` | Wall time of clean binaries (`philo_ordered gate`) with vs without `LD_PRELOAD=build/libpdp.so` | `$OUT_DIR/overhead.csv` |
+| `helgrind.sh` | `valgrind --tool=helgrind` on the 5 binaries in `BINS` (bank sem_sq philo_naive gate philo_ordered); does it print "lock order"? | `$OUT_DIR/helgrind.csv`, `$OUT_DIR/helgrind/*.log` |
+| `plot.py` | Hang-rate charts with 95% Wilson CIs, overhead chart, summary table on stdout | `<dir>/hangrate_<binary>.png`, `<dir>/overhead.png` |
 
 ## results/ layout
 - `results/cloud/`: 4-vCPU cloud container run, 200 runs/config.

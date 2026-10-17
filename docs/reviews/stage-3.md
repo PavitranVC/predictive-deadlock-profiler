@@ -1,4 +1,4 @@
-# Stage 3 review: ground-truth test suite
+# Stage 3 Review: Ground-Truth Test Suite
 
 Scope: tests/README.md, tests/bank.c, tests/sem_sq.c, tests/gate.c,
 tests/philo_naive.c, tests/philo_ordered.c, tests/check_suite.sh, Makefile.

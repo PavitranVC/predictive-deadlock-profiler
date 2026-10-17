@@ -1,4 +1,4 @@
-# Review: Stage 5 (experiment scripts) and Stage 6 (demo)
+# Stage 5 and 6 Review: Experiment Scripts and Demo
 
 Reviewer pass on the code only. The full results are still being generated in another session.
 Files: `scripts/{README.md,run_experiment.sh,overhead.sh,helgrind.sh,plot.py,demo.sh}`, `tests/README.md`.

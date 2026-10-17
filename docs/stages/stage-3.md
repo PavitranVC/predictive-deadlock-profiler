@@ -1,4 +1,4 @@
-# Stage 3 — Ground-truth test suite (`tests/`)
+# Stage 3: Ground-truth test suite (`tests/`)
 
 Status: built, `make && make test` passes (per the builder's status line). Committed as `09cda59`; the reviewer
 report is `docs/reviews/stage-3.md` (commit `fd35b2b`). Source: `tests/bank.c`, `tests/sem_sq.c`, `tests/gate.c`,

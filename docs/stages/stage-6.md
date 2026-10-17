@@ -1,4 +1,4 @@
-# Stage 6 — Live demo (`scripts/demo.sh`) and the viva script
+# Stage 6: Live demo (`scripts/demo.sh`) and the viva script
 
 Status: built and smoke-tested (`DEMO_NOPAUSE=1 scripts/demo.sh` exits 0 in about 4 s, no leftover `bank` process).
 Review: `docs/reviews/stage-5-6.md`, items 13–18. Fixes applied: ptrace reason and fix printed, check that `bank slow`
@@ -57,12 +57,11 @@ Two threads can never be inside the pair at the same time, so there is no deadlo
 then its filter looks at the held sets, sees the common gate, and marks the cycle FILTERED. Helgrind reports this same
 case as a violation; that is the false positive in the Helgrind comparison."
 
-**Step 7 — Experiment results.** Command: opens the first hang-rate chart found in `results/` (`hangrate_*.png`), with
+**Step 7 — Experiment results.** Command: opens the first hang-rate chart found in `results/wsl2/` (`hangrate_*.png`), falling back to `results/cloud/`, with
 `wslview`, `xdg-open` or `explorer.exe` if available, otherwise prints the file path.
 Say: "This is the 10,800-run experiment. The hang rate depends on the scheduler, the cores and the load, and each bar
 has a 95% Wilson interval. The headline: one core never hangs; more cores hang more; load hides the bug under the
-default scheduler and exposes it under real-time scheduling. The numbers are from a cloud VM, and the WSL2 rerun is
-next."
+default scheduler and exposes it under real-time scheduling. The primary numbers are from WSL2, the course platform, and a cloud VM replicated the main findings."
 
 ## Fallbacks (what to do when something goes wrong)
 
@@ -70,10 +69,10 @@ next."
 |---|---|---|
 | Step 2 prints "(ptrace_scope=1 blocks gdb attach. Fix: sudo sysctl kernel.yama.ptrace_scope=0 ...)" | Yama `ptrace_scope` is 1 by default on a fresh Ubuntu / WSL2, so a process cannot attach to a non-child. The demo shell is not gdb's ancestor. | This is a good moment: say what Yama is and why the default exists. Then run `sudo sysctl kernel.yama.ptrace_scope=0` (reverts on reboot) and re-run. If passwordless sudo is set up, the demo uses `sudo -n gdb` on its own. |
 | "(gdb not installed: sudo apt install gdb)" | gdb is not in a default install. | Install it before the viva. Without it, `top` alone still shows the threads at 0% CPU. |
-| "(bank slow did not hang this time; re-run the demo)" | The hang is not certain on every run (Stage 5: 64% to 94% on 2 to 4 cores). | Re-run. Or say the number: "it hangs about 9 times in 10 on this machine". |
+| "(bank slow did not hang this time; re-run the demo)" | The hang is not certain on every run (Stage 5, WSL2: 67.0% of idle runs on 2 cores, 57 to 68% on 4 cores; cloud replication: 64% to 94%). | Re-run. Or say the number: "on WSL2 it hung in about 2 runs in 3 when idle". |
 | Step 5 "(tests/bin/bank_fixed not built yet; skipping)" | Only if the build was broken. | Run `make -s` again and check the build log. |
 | No colours, `^[[1;36m` codes | Output piped or recorded. | Colours are printed only on a terminal (`[ -t 1 ]`). Not a bug. |
-| Step 7 says "No charts" or prints a path | No `results/hangrate_*.png` (the experiment was not run here), or no GUI opener on this machine. | Open the PNG from the file browser. The charts are also in `docs/stages/stage-5.md`. |
+| Step 7 says "No charts" or prints a path | No `results/wsl2/hangrate_*.png` or `results/cloud/hangrate_*.png` (the experiment was not run here), or no GUI opener on this machine. | Open the PNG from the file browser. The charts are also in `docs/stages/stage-5.md`. |
 | Ctrl-C in the middle of step 4 | `timeout` runs its child in its own process group, so Ctrl-C does not reach it directly. | The demo traps INT/TERM and exits 130, and `timeout --foreground` is used for the confirm step. The temp directory is removed on exit. |
 | Step 4 takes time | Ten runs, each up to 1 s + watchdog, and the delay adds 100 ms per site. | Under 120 s. Use `DEMO_NOPAUSE=1` in advance to check timing. |
 
@@ -90,9 +89,9 @@ present in three checks in a row is a real deadlock, so the program is ended wit
 both the exit code and the log line. A gate lock on both orders is filtered, so we do not raise a false alarm, and
 Helgrind does raise one on that case. For the scheduling question we ran the real programs 10,800 times without PDP:
 no hangs on one core, many on several, and the load does opposite things under the default scheduler and under
-real-time scheduling. We have a hypothesis for why, and we say it is not proven. The cost is 7 to 11 microseconds per
-lock, which is large for a microbenchmark and is future work to reduce with per-thread buffers. The limits are that
-static and setuid binaries ignore `LD_PRELOAD`, and that the experiment ran on a cloud VM, not WSL2."
+real-time scheduling. We have a hypothesis for why, and we say it is not proven. The cost is 1.5 to 3.1 microseconds per
+lock on WSL2 (6.7 to 11.3 on the cloud replication), which is large for a microbenchmark and is future work to reduce with per-thread buffers. The limits are that
+static and setuid binaries ignore `LD_PRELOAD`, and that WSL2 is itself a virtual machine, so its vCPUs are not physical cores."
 
 ## Explain it in the viva
 

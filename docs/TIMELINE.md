@@ -1,4 +1,4 @@
-# Timeline — every commit, in order
+# Timeline: Every Commit, in Order
 
 All commits are dated 2026-10-17 (times are local, from the commit list). Hashes are on `main`.
 
@@ -16,7 +16,7 @@ Types: **WIP** = work in progress, pushed for safety before the stage was finish
 | `3526c8d` | 12:48 | 2 | code | Analyzer final: GoodLock filters, F(R) fix suggestion, review fixes, docs |
 | `e969aba` | 12:50 | 5 | code | Parallel session: binaries invoked as `<bin> race ITER`, iter column recorded |
 | `7a5b444` | 12:51 | 3 | WIP | Ground-truth test suite (bank, sem_sq, gate, philosophers) |
-| `7e357a9` | 12:51 | 5 | merge | First merge of the experimenter branch into `ccr-b8583290-l43ezk` |
+| `7e357a9` | 12:51 | 5 | merge | First merge of the experiment branch (`ccr-b8583290-l43ezk-experiments`, auto-named by the cloud tool; merged into main and deleted) into the development branch (`ccr-b8583290-l43ezk`, likewise merged and deleted) |
 | `fd35b2b` | 13:00 | 3 | review | Stage 3 review report (3 MUST-FIX) |
 | `09cda59` | 13:01 | 3 | code | Suite final: start barrier, strict asserts, named forks |
 | `f0028d3` | 13:03 | 3 | docs | Stage 3 notes, CHANGELOG, arch-v3, VIVA terms |
@@ -35,7 +35,9 @@ Types: **WIP** = work in progress, pushed for safety before the stage was finish
 | `2c9ade3` | 14:57 | 5+6 | docs | Experiment results docs, demo walkthrough, final README and VIVA (arch-v5) |
 | `b96f9a5` | 16:15 | 6 | docs | Full commit timeline, process and review-driven design changes, fixed changelog refs |
 | `4e2e80b` | 18:13 | 5 | results | WSL2 replication: 10,800 runs with randomised blocks, `results/wsl2/` (manifest, env, overhead, Helgrind, charts). Pushed from the local machine via Antigravity |
-| pending | pending | 5 | docs | WSL2 replication docs: `stage-5.md` section, README headline, VIVA (answers 44 to 56), CHANGELOG and TIMELINE (not committed yet) |
+| `7a6cd5e` | - | 5 | docs | WSL2 replication docs: `stage-5.md` section, README headline, VIVA (answers 44 to 56), CHANGELOG and TIMELINE |
+| `e24238d` | - | 5 | results | Cloud results moved from `results/` to `results/cloud/` |
+| this tidy-up commit (pending) | - | all | docs | Repository tidy-up: README rewrite, `docs/README.md` index, readable branch labels, fixed result paths, project marked complete |
 
 Stage 1 final is `3b02523` (WIP `891e236`). Stage 2 is `a8a3cfb` (WIP) and `3526c8d` (final). Stage 6 is `4a930ec` (demo), `4339dbf` (bank_fixed), `fe5def7` (review), `dfe6a7b` (fixes) and `2c9ade3` (docs and README).
 

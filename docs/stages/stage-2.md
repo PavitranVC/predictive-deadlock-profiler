@@ -1,6 +1,6 @@
-# Stage 2 — Analyzer (`pdp-analyze`, `pdp analyze`)
+# Stage 2: Analyzer (`pdp-analyze`, `pdp analyze`)
 
-Status: built, `make && make test` passes (per the builder's status line). Not committed yet. Reviewed
+Status: built, `make && make test` passes (per the builder's status line). Reviewed
 against commit `a8a3cfb` (`docs/reviews/stage-2.md`); the review fixes are in the table below. Source:
 `src/analyze.c` (parse, graph, cycles, filters), `src/report.c` (names, report, fix, dot), `src/analyze.h`
 (limits and shared structs), `src/pdp` (the front-end script). Demo: `tests/bank.c`.

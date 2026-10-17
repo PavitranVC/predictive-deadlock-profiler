@@ -1,4 +1,4 @@
-# Stage 2 review: analyzer (analyze.c, report.c, analyze.h, pdp, bank.c, tests)
+# Stage 2 Review: Analyzer
 
 Reviewer, 2026-10-17. Reviewed at commit a8a3cfb (Stage 2 WIP). Includes the `lk=` change from `git diff HEAD~1 -- src/libpdp.c src/pdp.h`.
 `make && make test`: both suites PASS. bank demo: REAL acct_a -> acct_b -> acct_a, bank.c:39/51, exit 2. That is correct.

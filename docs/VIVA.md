@@ -1,4 +1,4 @@
-# VIVA prep — PDP (through Stage 6)
+# VIVA Prep: PDP (Through Stage 6)
 
 Plain-English glossary and likely examiner questions. Each entry is written so you can say it out loud.
 
