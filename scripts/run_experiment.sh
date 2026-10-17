@@ -13,7 +13,7 @@
 #
 # Usage:  RUNS=5 scripts/run_experiment.sh        (smoke test)
 #         scripts/run_experiment.sh               (full: 200 runs per cell)
-# Env overrides: RUNS, BIN_DIR, BINS, OUT_DIR, TIMEOUT_S
+# Env overrides: RUNS, ITER, BIN_DIR, BINS, OUT_DIR, TIMEOUT_S
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,6 +23,9 @@ OUT_DIR="${OUT_DIR:-$ROOT/results}"
 BINS="${BINS:-bank sem_sq philo_naive}"
 RUNS="${RUNS:-200}"
 TIMEOUT_S="${TIMEOUT_S:-5}"
+# Test programs take a mode argument: `race ITER` = concurrent, no artificial delay,
+# ITER iterations (natural manifestation). `slow` is for the confirmer, never used here.
+ITER="${ITER:-1000}"
 
 mkdir -p "$OUT_DIR"
 NPROC="$(nproc)"
@@ -42,6 +45,7 @@ DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "container: likely"; else echo "container: no"; fi
   echo "runs_per_cell: $RUNS"
   echo "timeout_s: $TIMEOUT_S"
+  echo "iter: $ITER"
   echo "bins: $BINS"
   echo "stress_ng: $(command -v stress-ng || echo none)"
 } > "$OUT_DIR/env.txt"
@@ -106,7 +110,7 @@ start_load() {   # $1 = cpuset, $2 = number of spinners
 }
 
 # ---- main loop ---------------------------------------------------------------
-echo "date,host,kernel,binary,sched,cores,load,run,outcome,elapsed_ms" > "$OUT_DIR/manifest.csv"
+echo "date,host,kernel,binary,sched,cores,load,iter,run,outcome,elapsed_ms" > "$OUT_DIR/manifest.csv"
 for bin in $BINS; do
   exe="$BIN_DIR/$bin"
   [ -x "$exe" ] || { echo "WARNING: $exe missing, skipping" >&2; continue; }
@@ -121,7 +125,7 @@ for bin in $BINS; do
           t0=$(date +%s%N)
           # -k 1: escalate to SIGKILL if SIGTERM is ignored. timeout is the
           # outermost command so it still works if sudo/chrt/taskset are chained.
-          timeout -k 1 "$TIMEOUT_S" $SUDO taskset -c "$cores" $pre "$exe" >/dev/null 2>&1
+          timeout -k 1 "$TIMEOUT_S" $SUDO taskset -c "$cores" $pre "$exe" race "$ITER" >/dev/null 2>&1
           rc=$?
           t1=$(date +%s%N)
           case $rc in
@@ -129,7 +133,7 @@ for bin in $BINS; do
             124|137) outcome=hung ;;   # timed out => deadlock manifested
             *)       outcome=error ;;
           esac
-          echo "$DATE,$HOST,$KERNEL,$bin,$sched,$cores,$load,$r,$outcome,$(( (t1 - t0) / 1000000 ))" >> "$OUT_DIR/manifest.csv"
+          echo "$DATE,$HOST,$KERNEL,$bin,$sched,$cores,$load,$ITER,$r,$outcome,$(( (t1 - t0) / 1000000 ))" >> "$OUT_DIR/manifest.csv"
         done
         [ "$load" = loaded ] && stop_load
       done

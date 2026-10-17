@@ -19,8 +19,8 @@ python3 scripts/plot.py               # needs matplotlib (pip install --user mat
 Full matrix = 3 binaries x 3 schedulers x 3 core sets x 2 loads x 200 runs = 10,800 runs; every hang costs 5 s, so budget hours. Other env vars: `TIMEOUT_S`, `BINS`, `LIBPDP`.
 
 ## manifest.csv columns
-`date` UTC start of the batch; `host`, `kernel` machine identity; `binary` test program; `sched` `default` (CFS/EEVDF), `fifo50` (`chrt -f 50`), `rr50` (`chrt -r 50`); `cores` `taskset -c` set (`0`, `0-1`, `0-3`); `load` `idle` or `loaded` (one pinned busy process per core in the set, stress-ng if installed); `run` index; `outcome` `hung` (timeout), `ok` (exit 0), `error` (other non-zero exit, e.g. crash); `elapsed_ms` wall time (≈5000 for hung).
-`overhead.csv`: `binary,mode(baseline|pdp),run,elapsed_ms`, baseline and pdp runs interleaved.
+`date` UTC start of the batch; `host`, `kernel` machine identity; `binary` test program; `sched` `default` (CFS/EEVDF), `fifo50` (`chrt -f 50`), `rr50` (`chrt -r 50`); `cores` `taskset -c` set (`0`, `0-1`, `0-3`); `iter` ITER passed as `<bin> race ITER` (env `ITER`, default 1000; more iterations = more chances per process to hit the bad interleaving); `load` `idle` or `loaded` (one pinned busy process per core in the set, stress-ng if installed); `run` index; `outcome` `hung` (timeout), `ok` (exit 0), `error` (other non-zero exit, e.g. crash); `elapsed_ms` wall time (≈5000 for hung).
+`overhead.csv`: `binary,mode(baseline|pdp),iter,run,elapsed_ms` , baseline and pdp runs interleaved.
 `helgrind.csv`: `exit_code,timed_out,lock_order_reported,lock_order_count`.
 
 ## Skipped configs
