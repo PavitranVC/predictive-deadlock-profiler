@@ -125,17 +125,22 @@ static void print_edges(const struct cycle *c) {
     }
 }
 
-static void print_group(int want_real, const char *colour, const char *title) {
+/* 0 = REAL, 1 = UNDECIDED (search capped), 2 = FILTERED */
+static int verdict(const struct cycle *c) { return c->real ? 0 : c->capped ? 1 : 2; }
+
+static void print_group(int want, const char *colour, const char *title) {
     int k = 0;
     for (int i = 0; i < g.ncycles; i++) {
         const struct cycle *c = &g.cycles[i];
-        if (c->real != want_real) continue;
+        if (verdict(c) != want) continue;
         if (k++ == 0) printf("%s%s%s\n", colour, title, RST);
         printf("  %s[%d] ", colour, k);
         print_cycle_line(c);
-        if (!want_real && c->gate >= 0) printf("  -- common gate lock %s", nm(c->gate));
-        else if (!want_real) printf("  -- same-thread cycle (one thread cannot deadlock itself)");
-        if (c->capped) printf("  (search capped, may be incomplete)");
+        if (want == 2 && c->gate >= 0)
+            printf("  -- gate lock %s held by both tid %ld and tid %ld", nm(c->gate),
+                   g.edges[c->pick[c->gate_hop[0]]].tid, g.edges[c->pick[c->gate_hop[1]]].tid);
+        else if (want == 2)
+            printf("  -- same-thread cycle or too few distinct threads (one thread cannot deadlock itself)");
         printf("%s\n", RST);
         print_edges(c);
     }
@@ -145,12 +150,16 @@ void print_report(void) {
     printf("PDP analysis: %d locks, %d edges\n", g.nnodes, g.nedges);
     if (g.unknown_held) printf("warning: skipped %d REQ lines with held=? (unknown held set)\n", g.unknown_held);
     if (g.log_warns) printf("warning: log contains %d '# pdp WARN' lines (data was lost)\n", g.log_warns);
-    if (g.dropped) printf("warning: %d items dropped (analyzer tables full or cycle too long)\n", g.dropped);
-    print_group(1, RED, "REAL potential deadlocks:");
-    print_group(0, YEL, "FILTERED cycles (not deadlocks):");
-    int real = 0;
-    for (int i = 0; i < g.ncycles; i++) real += g.cycles[i].real;
-    if (real == 0) printf("%sNo deadlock potential found.%s\n", GRN, RST);
+    if (g.dropped) printf("warning: %d items dropped (analyzer tables full)\n", g.dropped);
+    if (g.cyc_capped)
+        printf("warning: cycle search hit a limit (length %d, %d cycles or %d steps): some cycles may be missing\n",
+               MAX_CYC_LEN, MAX_CYCLES, MAX_CYC_STEPS);
+    print_group(0, RED, "REAL potential deadlocks:");
+    print_group(1, RED, "UNDECIDED (search capped; cannot rule out a deadlock):");
+    print_group(2, YEL, "FILTERED cycles (not deadlocks):");
+    int found = 0;
+    for (int i = 0; i < g.ncycles; i++) found += verdict(&g.cycles[i]) < 2;
+    if (found == 0 && !g.cyc_capped) printf("%sNo deadlock potential found.%s\n", GRN, RST);
 }
 
 /* ---------- fix suggestion F(R) ---------- */
@@ -162,6 +171,21 @@ static int pair_count(int a, int b) {
     for (int i = 0; i < g.nedges; i++)
         if (g.edges[i].from == a && g.edges[i].to == b) total += g.edges[i].count;
     return total;
+}
+
+/* Every distinct call site that produced the pair: changing one is not enough. */
+static void print_sites(int a, int b) {
+    for (int i = 0; i < g.nedges; i++) {
+        const struct edge *e = &g.edges[i];
+        if (e->from != a || e->to != b) continue;
+        int seen = 0;
+        for (int j = 0; j < i; j++)
+            if (g.edges[j].from == a && g.edges[j].to == b && strcmp(g.edges[j].site, e->site) == 0) seen = 1;
+        if (seen) continue;
+        char where[SITE_LEN + 64];
+        resolve_site(e->site, where, sizeof where);
+        printf("      %s (tid %ld)\n", where, e->tid);
+    }
 }
 
 /* Break every real cycle by dropping its least frequent pair: the rarer
@@ -181,10 +205,9 @@ static void drop_edges(void) {
         if (already) continue;
         const struct edge *e = &g.edges[c->pick[best]];
         removed[e->from][e->to] = 1;
-        char where[SITE_LEN + 64];
-        resolve_site(e->site, where, sizeof where);
-        printf("  drop %s -> %s (seen %dx): change the call site at %s (tid %ld)\n",
-               nm(e->from), nm(e->to), best_count, where, e->tid);
+        printf("  drop %s -> %s (seen %dx): change the call site(s):\n",
+               nm(e->from), nm(e->to), best_count);
+        print_sites(e->from, e->to);
     }
 }
 
@@ -210,9 +233,11 @@ static void print_order(void) {
             break;                                 /* restart: smallest id first */
         }
     }
-    for (int v = 0; v < g.nnodes; v++)             /* locks in remaining (filtered) cycles */
-        if (used[v] && !done[v]) { printf("%s%s", first ? "" : ", ", nm(v)); first = 0; }
     printf("\n");
+    int left = 0;                                  /* these sit in cycles that remain: no valid order */
+    for (int v = 0; v < g.nnodes; v++)
+        if (used[v] && !done[v]) { printf("%s%s", left++ ? ", " : "  still cyclic (filtered or unanalysed): ", nm(v)); }
+    if (left) printf("\n");
 }
 
 void print_fix(void) {
@@ -233,7 +258,7 @@ static int pair_status(int a, int b) {
         const struct cycle *c = &g.cycles[i];
         for (int hop = 0; hop < c->len; hop++)
             if (c->nodes[hop] == a && c->nodes[(hop + 1) % c->len] == b) {
-                int s = c->real ? 2 : 1;
+                int s = verdict(c) < 2 ? 2 : 1;   /* undecided counts as dangerous */
                 if (s > status) status = s;
             }
     }

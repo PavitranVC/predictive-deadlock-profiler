@@ -1,0 +1,5 @@
+# pdp v1 pid=1 exe=/nonexistent/prog
+# T1 holds G,A wants B; T2 holds G,B wants C; T3 holds C wants A. G shared by only 2 of 3 threads
+0 1 REQ M 0xb0 /nonexistent/prog+0x10 held=0x10,0xa0
+1 2 REQ M 0xc0 /nonexistent/prog+0x20 held=0x10,0xb0
+2 3 REQ M 0xa0 /nonexistent/prog+0x30 held=0xc0

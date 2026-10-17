@@ -1,6 +1,8 @@
 /* analyze.c - read a PDP log, build the lock-order graph, find deadlock cycles.
  * Usage: pdp-analyze <logfile> [--dot report.dot] [--no-color]
- * Exit: 0 = no real cycle, 2 = real cycle(s), 1 = error. */
+ * Exit: 0 = nothing found, 2 = REAL or UNDECIDED cycle(s), 1 = error.
+ * Assumes ONE process: after fork() the child shares the log and reuses addresses,
+ * and a reused tid would merge two threads; both can give wrong cycles. */
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,7 +72,7 @@ static struct event *read_log(const char *path, int *count) {
     int n = 0, cap = 0;
     char line[4096];
     while (fgets(line, sizeof line, f)) {
-        if (line[0] == '#') { if (strstr(line, "WARN")) g.log_warns++; continue; }
+        if (line[0] == '#') { if (strstr(line, "# pdp WARN")) g.log_warns++; continue; }
         if (n == cap) {
             cap = cap ? cap * 2 : 1024;
             evs = realloc(evs, cap * sizeof *evs);
@@ -152,7 +154,11 @@ static void handle_request(const struct event *ev) {
     int held[MAX_HELDSET], n = 0;
     for (int i = 0; i < ev->nheld; i++) {
         int h = node_for(ev->held[i], '?', "?");
-        if (h >= 0 && h != to) held[n++] = h;   /* h == to: recursive lock, no ordering info */
+        /* WHY return: the thread already holds `to`, so this is a recursive re-lock
+         * (or a self-deadlock, a different bug). It cannot wait for another thread,
+         * so it is no link in a wait cycle; edges from the other held locks would be false. */
+        if (h == to) return;
+        if (h >= 0) held[n++] = h;
     }
     for (int i = 0; i < n; i++) add_edge(held[i], to, ev, held, n);
 }
@@ -171,121 +177,132 @@ static void build_graph(const struct event *evs, int n) {
     }
 }
 
-/* ---------- cycle detection: three-colour DFS ---------- */
+/* ---------- cycle detection: bounded elementary-cycle enumeration ---------- */
 
-enum { WHITE, GREY, BLACK };
-static int colour[MAX_NODES], path[MAX_NODES];
+/* WHY per start node: one DFS (e.g. three colours) reports only one cycle per back
+ * edge and misses cycles that share nodes with an earlier one. That is dangerous
+ * because a found cycle can be FILTERED (same thread, gate lock) while a different
+ * cycle through the same locks is a real deadlock. So for each start node s we search
+ * for ALL paths that return to s, using only nodes with index > s. Every elementary
+ * cycle has one smallest node, so it is found exactly once, from that node, and
+ * no rotation/duplicate check is needed. */
 
-/* Store the cycle rotated to start at its smallest node id, so the same cycle
- * found from a different starting point compares equal. */
-static void record_cycle(const int *nodes, int len) {
-    if (len > MAX_CYC_LEN || g.ncycles == MAX_CYCLES) { g.dropped++; return; }
-    int min = 0;
-    for (int i = 1; i < len; i++) if (nodes[i] < nodes[min]) min = i;
-    struct cycle c;
-    memset(&c, 0, sizeof c);
-    c.len = len; c.gate = -1;
-    for (int i = 0; i < len; i++) c.nodes[i] = nodes[(min + i) % len];
-    for (int k = 0; k < g.ncycles; k++)
-        if (g.cycles[k].len == len && memcmp(g.cycles[k].nodes, c.nodes, len * sizeof(int)) == 0) return;
-    g.cycles[g.ncycles++] = c;
+static char adj[MAX_NODES][MAX_NODES];   /* adj[a][b] = some edge a -> b exists */
+static char onpath[MAX_NODES];
+static int  path[MAX_CYC_LEN], start;
+static long cyc_steps;
+static int  stop;                        /* a limit was hit: give up the whole enumeration */
+
+static void record_cycle(int len) {
+    if (g.ncycles == MAX_CYCLES) { g.cyc_capped = 1; stop = 1; return; }
+    struct cycle *c = &g.cycles[g.ncycles++];
+    memset(c, 0, sizeof *c);
+    c->len = len; c->gate = -1;
+    memcpy(c->nodes, path, len * sizeof(int));
 }
 
-/* GREY = on the current DFS path. An edge to a GREY node closes a loop. */
-static void dfs(int u, int depth) {
-    colour[u] = GREY;
-    path[depth] = u;
-    for (int i = 0; i < g.nedges; i++) {
-        if (g.edges[i].from != u) continue;
-        int v = g.edges[i].to;
-        if (colour[v] == GREY) {
-            int start = depth;
-            while (path[start] != v) start--;
-            record_cycle(path + start, depth - start + 1);
-        } else if (colour[v] == WHITE) {
-            dfs(v, depth + 1);
-        }
+/* path[0..depth] is the current path and path[depth] == u. */
+static void extend(int u, int depth) {
+    for (int v = start; v < g.nnodes && !stop; v++) {
+        if (!adj[u][v]) continue;
+        if (v == start) { record_cycle(depth + 1); continue; }   /* edge back to s closes a cycle */
+        if (onpath[v]) continue;                                 /* keep the path elementary */
+        if (depth + 1 >= MAX_CYC_LEN) { g.cyc_capped = 1; continue; }
+        if (++cyc_steps > MAX_CYC_STEPS) { g.cyc_capped = 1; stop = 1; return; }
+        onpath[v] = 1; path[depth + 1] = v;
+        extend(v, depth + 1);
+        onpath[v] = 0;                                           /* backtrack */
     }
-    colour[u] = BLACK;
 }
 
 static void find_cycles(void) {
-    for (int u = 0; u < g.nnodes; u++)
-        if (colour[u] == WHITE) dfs(u, 0);
+    for (int i = 0; i < g.nedges; i++) adj[g.edges[i].from][g.edges[i].to] = 1;
+    for (start = 0; start < g.nnodes && !stop; start++) {
+        onpath[start] = 1; path[0] = start;
+        extend(start, 0);
+        onpath[start] = 0;
+    }
 }
 
 /* ---------- filtering: is the cycle a real deadlock? ---------- */
 
+static int cand[MAX_CYC_LEN][MAX_EDGES];   /* edges usable for each hop, collected once */
+static int ncand[MAX_CYC_LEN];
+
 struct search {
     struct cycle *c;
     int pick[MAX_CYC_LEN];
-    long tried;
-    int gate;                   /* first gate lock seen, or -1 */
-    int gate_pick[MAX_CYC_LEN];
+    long steps;
+    int capped;
+    int gate, gate_hop[2], gate_edge[2];   /* first blocking gate lock seen, or gate = -1 */
     int found;
 };
-
-static int in_cycle(const struct cycle *c, int node) {
-    for (int i = 0; i < c->len; i++) if (c->nodes[i] == node) return 1;
-    return 0;
-}
 
 static int in_held(const struct edge *e, int node) {
     for (int i = 0; i < e->nheld; i++) if (e->held[i] == node) return 1;
     return 0;
 }
 
-/* A gate lock is held by EVERY chosen thread (so they cannot be in the cycle at
- * the same time) and is not itself part of the cycle. Returns node id or -1. */
-static int find_gate(const struct search *s) {
-    const struct edge *first = &g.edges[s->pick[0]];
-    for (int i = 0; i < first->nheld; i++) {
-        int x = first->held[i], all = !in_cycle(s->c, x);
-        for (int hop = 1; hop < s->c->len && all; hop++)
-            if (!in_held(&g.edges[s->pick[hop]], x)) all = 0;
-        if (all) return x;
-    }
+/* A lock held by both edges' threads, or -1. Both threads cannot hold it at the same
+ * time, so they cannot be stuck in this cycle together. */
+static int shared_lock(const struct edge *a, const struct edge *b) {
+    for (int i = 0; i < a->nheld; i++)
+        if (in_held(b, a->held[i])) return a->held[i];
     return -1;
 }
 
-/* Try every way to pick one concrete edge per hop. Threads must be pairwise
- * distinct (one thread cannot wait for itself), pruned as we go. */
+/* Pick one concrete edge per hop. GoodLock rule: a combination is valid only if
+ * the threads are pairwise distinct AND the held sets of every pair are disjoint.
+ * (The held set includes the edge's own source lock; a lock held by two threads at
+ * once is impossible anyway, so counting it is correct.) This subsumes the old
+ * "one gate lock common to all edges" rule: it also catches a gate held by only
+ * some of the threads. Checked pair by pair as we go so bad branches die early.
+ * `steps` counts candidates examined (work done), so the cap really bounds time. */
 static void choose(struct search *s, int hop) {
-    struct cycle *c = s->c;
-    if (s->found || s->tried >= MAX_COMBOS) return;
-    if (hop == c->len) {
-        s->tried++;
-        int gate = find_gate(s);
-        if (gate < 0) { s->found = 1; memcpy(c->pick, s->pick, sizeof s->pick); }
-        else if (s->gate < 0) { s->gate = gate; memcpy(s->gate_pick, s->pick, sizeof s->pick); }
-        return;
-    }
-    int from = c->nodes[hop], to = c->nodes[(hop + 1) % c->len];
-    for (int i = 0; i < g.nedges; i++) {
-        if (g.edges[i].from != from || g.edges[i].to != to) continue;
-        int clash = 0;
-        for (int j = 0; j < hop; j++) if (g.edges[s->pick[j]].tid == g.edges[i].tid) clash = 1;
-        if (clash) continue;
+    if (hop == s->c->len) { s->found = 1; return; }
+    for (int k = 0; k < ncand[hop]; k++) {
+        if (s->found || s->capped) return;
+        if (++s->steps > MAX_STEPS) { s->capped = 1; return; }
+        int i = cand[hop][k], ok = 1;
+        for (int j = 0; j < hop && ok; j++) {
+            const struct edge *a = &g.edges[s->pick[j]], *b = &g.edges[i];
+            if (a->tid == b->tid) { ok = 0; continue; }
+            int x = shared_lock(a, b);
+            if (x < 0) continue;
+            ok = 0;
+            if (s->gate < 0) {      /* remember the first blocker for the report */
+                s->gate = x; s->gate_hop[0] = j; s->gate_hop[1] = hop;
+                s->gate_edge[0] = s->pick[j]; s->gate_edge[1] = i;
+            }
+        }
+        if (!ok) continue;
         s->pick[hop] = i;
         choose(s, hop + 1);
     }
 }
 
 static void classify(struct cycle *c) {
-    struct search s;
+    static struct search s;
     memset(&s, 0, sizeof s);
     s.c = c; s.gate = -1;
-    choose(&s, 0);
-    c->capped = !s.found && s.tried >= MAX_COMBOS;
-    c->real = s.found;
-    if (s.found) return;
-    c->gate = s.gate;
-    if (s.gate >= 0) memcpy(c->pick, s.gate_pick, sizeof c->pick);
-    else for (int hop = 0; hop < c->len; hop++) {      /* same-thread: show the first edge per hop */
+    for (int hop = 0; hop < c->len; hop++) {
+        int from = c->nodes[hop], to = c->nodes[(hop + 1) % c->len];
+        ncand[hop] = 0;
         for (int i = 0; i < g.nedges; i++)
-            if (g.edges[i].from == c->nodes[hop] && g.edges[i].to == c->nodes[(hop + 1) % c->len]) {
-                c->pick[hop] = i; break;
-            }
+            if (g.edges[i].from == from && g.edges[i].to == to) cand[hop][ncand[hop]++] = i;
+    }
+    choose(&s, 0);
+    if (s.found) { c->real = 1; memcpy(c->pick, s.pick, sizeof c->pick); return; }
+    /* Not proven real. If we ran out of steps we do not know: UNDECIDED, which is
+     * treated like a possible deadlock (a false alarm is better than a missed one). */
+    c->capped = s.capped;
+    for (int hop = 0; hop < c->len; hop++) c->pick[hop] = cand[hop][0];
+    if (!s.capped && s.gate >= 0) {
+        c->gate = s.gate;
+        for (int k = 0; k < 2; k++) {
+            c->gate_hop[k] = s.gate_hop[k];
+            c->pick[s.gate_hop[k]] = s.gate_edge[k];
+        }
     }
 }
 
@@ -316,6 +333,6 @@ int main(int argc, char **argv) {
     print_fix();
     if (dot && write_dot(dot) != 0) return 1;
 
-    for (int i = 0; i < g.ncycles; i++) if (g.cycles[i].real) return 2;
+    for (int i = 0; i < g.ncycles; i++) if (g.cycles[i].real || g.cycles[i].capped) return 2;
     return 0;
 }

@@ -16,10 +16,18 @@ expect() {
 
 expect ab_ba.log         2 "REAL potential deadlocks" "L1 -> L2 -> L1" "tid 101" "tid 102" "acquire locks in this order"
 expect same_thread.log   0 "FILTERED" "same-thread" "No deadlock potential"
-expect gate.log          0 "FILTERED" "common gate lock L1" "No deadlock potential"
+expect gate.log          0 "FILTERED" "gate lock L1 held by both" "No deadlock potential"
 expect three_cycle.log   2 "REAL" "L1 -> L2 -> L3 -> L1"
 expect destroy_reuse.log 0 "No deadlock potential"
 expect unknown_held.log  0 "skipped 1 REQ" "No deadlock potential"
+# cycle sharing nodes with a filtered one must still be found
+expect shared_nodes.log  2 "REAL" "FILTERED" "same-thread"
+# re-locking a held (recursive) mutex adds no edges
+expect recursive.log     0 "No deadlock potential"
+# gate held by only 2 of 3 threads does not protect the cycle (pairwise rule)
+expect partial_gate.log  0 "FILTERED" "gate lock" "No deadlock potential"
+# step cap hit: conservative UNDECIDED, exit 2, and still quick
+expect capped.log        2 "UNDECIDED" "search capped"
 
 # the filtered logs must not be reported as REAL
 $A --no-color tests/logs/gate.log | grep -q "REAL" && fail "gate.log reported REAL"

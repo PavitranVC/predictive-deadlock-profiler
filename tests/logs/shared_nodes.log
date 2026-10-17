@@ -1,0 +1,10 @@
+# pdp v1 pid=1 exe=/nonexistent/prog
+# A=0xa0 B=0xb0 C=0xc0. A<->B by thread 1 alone (filtered); A->C->B->A needs 3 threads (real)
+0 1 REQ M 0xa0 /nonexistent/prog+0x10 held=-
+1 1 REQ M 0xb0 /nonexistent/prog+0x20 held=0xa0
+2 1 REQ M 0xb0 /nonexistent/prog+0x30 held=-
+3 1 REQ M 0xa0 /nonexistent/prog+0x40 held=0xb0
+4 2 REQ M 0xa0 /nonexistent/prog+0x50 held=-
+5 2 REQ M 0xc0 /nonexistent/prog+0x60 held=0xa0
+6 3 REQ M 0xc0 /nonexistent/prog+0x70 held=-
+7 3 REQ M 0xb0 /nonexistent/prog+0x80 held=0xc0

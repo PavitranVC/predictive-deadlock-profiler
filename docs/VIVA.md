@@ -1,4 +1,4 @@
-# VIVA prep — PDP (through Stage 1)
+# VIVA prep — PDP (through Stage 2)
 
 Plain-English glossary and likely examiner questions. Each entry is written so you can say it out loud.
 
@@ -32,6 +32,32 @@ Plain-English glossary and likely examiner questions. Each entry is written so y
 - **Coffman conditions**: the four conditions that must all hold for a deadlock: mutual exclusion (a lock is held by one thread), hold-and-wait (a thread holds one lock while waiting for another), no preemption (a lock is only released by its holder), and circular wait (a cycle of threads each waiting for the next).
 - **Lock-order graph**: a graph with one node per lock and an edge A→B whenever some thread takes B while holding A. A cycle in this graph (A→B and B→A) means a deadlock is possible, even if this run did not hang.
 - **Setuid / static binaries ignore `LD_PRELOAD`**: for setuid programs the loader ignores `LD_PRELOAD` (security). A statically linked program has its C library inside the binary, so there is no dynamic symbol to replace.
+- **REQ / ACQ**: the two log events around a lock wait. `REQ` is written before the thread asks for the lock, `ACQ` after it gets it. A thread that is stuck has a `REQ` and no `ACQ`.
+- **Trylock**: `pthread_mutex_trylock`, which takes the lock if it is free and returns at once otherwise. It never waits, so it cannot be part of a deadlock wait.
+- **Held set**: the locks a thread holds at a given moment. The analyzer stores the held set with every edge.
+- **Edge (in the lock-order graph)**: an arrow A→B that means "some thread asked for B while holding A". It stores the thread, the call site, the held set and a count.
+- **Lock identity / generation counter**: a lock is identified by its address plus a generation number. The generation goes up each time the address is destroyed and reused, so a new lock at an old address is a new node.
+- **Recursive mutex**: a mutex the same thread may lock again without blocking (a counter inside the lock). Locking it a second time cannot wait for anyone, so it adds no edge.
+- **Elementary cycle**: a cycle in a graph that visits each node at most once (A→B→C→A, but not A→B→A→B→A). Only elementary cycles are searched, so the same loop is not counted twice.
+- **Depth-first search (DFS)**: a graph search that follows one path as far as it goes, then backs up and tries the next. Recursion or an explicit stack does it.
+- **Three-colour DFS**: the classic cycle check that colours nodes white (not seen), grey (on the current path) and black (finished). A cycle is found when an edge goes to a grey node. Black nodes are never visited again, which is why it can miss cycles that share nodes with one already found. Colours are a standard topic in algorithm courses, so an examiner may ask about them.
+- **On-path flag**: a yes/no mark on a node that means "it is on the current path". It is set on entry and cleared on backtrack. Our search uses it in place of grey, and does not keep black.
+- **Back edge**: an edge from a node to one of its ancestors on the current DFS path. A back edge is what closes a cycle.
+- **Johnson's algorithm**: a standard efficient way to list all elementary cycles of a directed graph. Ours is a simpler version without its blocked-set optimisation.
+- **GoodLock**: a deadlock-prediction rule from the literature (introduced by Havelund in 2000, refined by Agarwal and Stoller and in iGoodlock). A cycle of lock-order edges is a potential deadlock only if the threads are distinct and the locks each thread holds are disjoint from the others'.
+- **Gate lock**: a lock that two threads of a cycle both hold while they wait. Because only one of them can hold it at a time, they cannot be stuck in the cycle together. Such a cycle is FILTERED.
+- **Guard set**: the set of locks that guard an edge, i.e. the held set of that edge. The filter asks whether two guard sets share a lock.
+- **False positive**: the tool reports a deadlock that could never happen. A gate lock the tool missed, or a trylock treated as a wait, would cause one.
+- **False negative**: the tool misses a deadlock that could happen. Missing data (a lost event), a capped search, or a lock never taken in the log can cause one.
+- **Soundness vs completeness**: a sound analysis reports only real problems (no false positives). A complete one finds every problem (no false negatives). Ours aims for completeness within its caps, and it is not sound, because it predicts from one run.
+- **UNDECIDED**: our verdict for a cycle whose edge search hit its step cap. We cannot prove it safe, so it counts as a possible deadlock and exits 2.
+- **Exit code**: the number a program returns to the shell. `pdp-analyze` returns 0 (nothing found), 2 (a REAL or UNDECIDED cycle), or 1 (the tool failed).
+- **Topological sort / Kahn's algorithm**: an ordering of graph nodes where every arrow goes forward. Kahn's method repeatedly outputs a node with no incoming arrows left. A graph with a cycle has no such order, so the leftover nodes are reported as "still cyclic".
+- **F(R)**: our fix suggestion. For each real cycle, remove the rarest edge, then give a lock order that respects what is left.
+- **`nm` / symbol table**: `nm` lists the names in a binary's symbol table, with each name's address and size. We use `nm -S` to find which static variable sits at a lock's address.
+- **`lk=`**: a field libpdp writes on each event: the address of the lock object as `module+0xoff`. It lets the analyzer name the lock.
+- **Fixed-size table**: an array with a set maximum (`MAX_NODES`, `MAX_EDGES`). We use them so memory is bounded; overflow is counted and reported.
+- **`popen`**: runs a shell command and reads its output. We use it for `addr2line` and `nm`, after checking the arguments so no shell metacharacter can get through.
 
 ## Likely examiner questions
 
@@ -79,3 +105,36 @@ Two threads can call `write` in a different order from their `seq` values, becau
 
 **15. What does a lock that is freed but never destroyed do?**
 Its address can be reused for a new lock, and the analyzer could merge two different locks into one node. `pthread_mutex_destroy` retires the address. Heap-allocated static-initialized mutexes that are freed without destroy are a documented limit.
+
+**16. Why can PDP report a deadlock that never happened in the run?**
+Because it predicts from the order the locks were taken, not from what actually happened. If one thread took A then B and another took B then A, the two orders can interleave into a deadlock, even though this run was scheduled so that they never overlapped. That is a potential deadlock. The report says "potential", and Stage 4 is meant to confirm it. The tool can also be wrong the other way (a false negative), for example when the log is capped or a lock was never taken in the run.
+
+**17. Why do trylocks add no edge?**
+A trylock returns at once, so it never waits. A cycle is only dangerous if every thread in it is waiting for a lock held by the next one. A trylock cannot be such a wait, so an edge from it would be a false positive. The lock a trylock obtains is still really held, so it does appear in later held sets.
+
+**18. Why do edges come from REQ and not from ACQ?**
+In a hung run, the thread that is stuck never gets the lock, so there is no ACQ for it. The REQ is written before the wait, so it is always in the log. Using REQ means a hung run is still analysed, which is the case we care about most.
+
+**19. Why did you drop the three-colour DFS?**
+A three-colour DFS reports one cycle per back edge, and it never revisits a black (finished) node. So a second cycle that passes through an already-finished node is never found. The reviewer built a case: A and B form a cycle that is FILTERED (same thread), and a real cycle A to C to B to A is hidden behind it, so the tool printed "no deadlock" with exit 0. Searching for elementary cycles from each start node finds every such cycle, and the caps keep the cost bounded. The price is more work, and the report says when a cap is hit.
+
+**20. What is a gate lock, and why check pairs of threads instead of one common lock?**
+A gate lock is a lock that two threads both hold while they wait, so only one of them can be in the critical part at a time, and they cannot deadlock each other. The old rule asked whether one lock was held by all threads of the cycle. That misses cases where two threads share a lock and the third does not, and it wrongly calls them real. Checking every pair of threads, that their held sets are disjoint, is the standard GoodLock condition and catches both.
+
+**21. How do you handle a lock whose memory is freed and reused?**
+Address alone does not identify a lock. When a mutex is destroyed and its address is later reused by a new mutex, the analyzer would see one node where there are two locks, and could invent a cycle. A DESTROY event marks the old node dead, and the next use of that address creates a new node with the generation counter increased. The second lock is printed as `#2`.
+
+**22. What does UNDECIDED mean, and why does it exit 2?**
+It means the search for a valid combination of edges ran out of its step budget before it finished, so we cannot say the cycle is safe. We treat that as a possible deadlock, because a false alarm is cheaper than a missed deadlock for this tool. Exit 2 tells a script that something needs attention, and 0 would wrongly say "safe".
+
+**23. How is the lock order in the fix suggestion computed?**
+For each real cycle we remove one arrow: the rarest edge, because the code that produces a rarely used order is the cheapest to change. Then we sort the remaining locks with Kahn's algorithm, which repeatedly outputs a lock that nothing still has to come before. The removed arrow's target comes first. If a cycle is still left after removal, its locks are printed as "still cyclic", not given an order, because no valid order exists for them.
+
+**24. Is the tool sound or complete?**
+Neither, strictly. It is aimed at completeness within its caps: it enumerates all elementary cycles up to length 8, and reports the caps when they cut the search. It is not sound, because a REAL verdict only means a consistent combination of observed edges exists, not that the interleaving will happen. Stage 4 is where a prediction is tested.
+
+**25. Why are the held sets stored on each edge, and not just the lock pairs?**
+The filters need them. Whether two threads can be stuck together depends on what each holds, so the held set is the evidence for the gate check. Storing only A to B would lose that and would make a gate lock invisible.
+
+**26. What does the bank demo show, and why does the sequential run not hang?**
+`tests/bank.c` has two tellers who lock the two accounts in opposite orders. Run one after the other (we join between them), they can never block each other, so the program always finishes. The analyzer still sees that teller 1 went A then B and teller 2 went B then A, and reports the cycle `acct_a -> acct_b -> acct_a` with exit 2. Run with `slow`, the two tellers overlap and do hang. This is the point of the tool: predict the hang from a run that did not hang.

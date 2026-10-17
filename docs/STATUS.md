@@ -1,16 +1,16 @@
 # STATUS board
 Every agent reads this first and updates ONLY its own line.
 
-- **Current stage:** 2 — Analyzer
-- **Done:** Stage 0 scaffolding; Stage 1 interceptor (reviewed, fixed, documented)
-- **Next:** Stage 2 builder (analyzer)
+- **Current stage:** 3 — Test suite
+- **Done:** Stage 0 scaffolding; Stage 1 interceptor; Stage 2 analyzer (reviewed, fixed, documented)
+- **Next:** Stage 3 builder (ground-truth tests), merge experimenter branch
 
 ## Agent lines
-- orchestrator: Stage 2 builder running here; experimenter running in separate session session_01WTfVALx9D4V1LroEGP6j1a on branch ccr-b8583290-l43ezk-experiments (scripts/ only).
-- builder: Stage 2 analyzer done (analyze.c/report.c/analyze.h, pdp script, bank.c, 6 logs, check_analyze.sh, lk= field in libpdp); make && make test PASS. Not committed.
+- orchestrator: Stage 2 committed; starting Stage 3. Experimenter in separate session (branch ccr-b8583290-l43ezk-experiments).
+- builder: Stage 2 review MUST-FIX 1-4 + pairwise gate + all-sites advice fixed (per-start bounded cycle enumeration replaces 3-colour DFS; UNDECIDED exit 2); 4 new test logs; make && make test PASS. Not committed.
 - experimenter: Stage 5 scripts in progress (separate session, branch ccr-b8583290-l43ezk-experiments)
-- docs: Stage 1 docs written (stages/stage-1.md, CHANGELOG.md, arch/arch-v1.dot+png, VIVA.md); not committed.
-- reviewer: Stage 1 reviewed -> docs/reviews/stage-1.md; 3 MUST-FIX (site ret-1, silent table/held overflow, pdp_init re-entry guard), 10 SHOULD-FIX, 9 NIT.
+- docs: Stage 2 docs written (stages/stage-2.md, CHANGELOG.md entry, arch/arch-v2.dot+png, VIVA.md through Stage 2); not committed.
+- reviewer: Stage 2 reviewed -> docs/reviews/stage-2.md; 4 MUST-FIX (DFS misses cycles sharing nodes, MAX_COMBOS counts leaves only = unbounded search, capped search reported FILTERED/exit 0, recursive re-lock makes false edges), 8 SHOULD-FIX, 14 NIT.
 
 ## Blockers
 - (none)

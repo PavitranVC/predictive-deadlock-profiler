@@ -4,9 +4,10 @@
 
 #define MAX_NODES   512
 #define MAX_EDGES   4096
-#define MAX_CYCLES  64
-#define MAX_CYC_LEN 32
-#define MAX_COMBOS  200000      /* cap on edge-choice combinations tried per cycle */
+#define MAX_CYCLES  256         /* stop collecting cycles after this many (warning is printed) */
+#define MAX_CYC_LEN 8           /* longest cycle searched; real deadlocks rarely involve more locks */
+#define MAX_CYC_STEPS 200000    /* DFS node visits allowed in total during cycle enumeration */
+#define MAX_STEPS   200000      /* candidate edges examined per cycle while choosing edges */
 #define MAX_HELDSET 64
 #define SITE_LEN    256
 
@@ -33,10 +34,11 @@ struct edge {
 struct cycle {
     int len;
     int nodes[MAX_CYC_LEN];     /* hop i is nodes[i] -> nodes[(i+1) % len] */
-    int real;                   /* 1 = REAL, 0 = FILTERED */
+    int real;                   /* 1 = REAL */
+    int capped;                 /* 1 = UNDECIDED: edge search hit MAX_STEPS (counts as a possible deadlock) */
     int pick[MAX_CYC_LEN];      /* chosen edge index per hop */
-    int gate;                   /* FILTERED: node id of the gate lock, or -1 = same-thread */
-    int capped;                 /* search hit MAX_COMBOS */
+    int gate;                   /* FILTERED: node id of the lock that blocked it, or -1 = thread clash */
+    int gate_hop[2];            /* FILTERED by gate: the two hops whose threads both hold it */
 };
 
 struct graph {
@@ -46,6 +48,7 @@ struct graph {
     int unknown_held;           /* REQ lines skipped because held=? */
     int log_warns;              /* "# pdp WARN" lines in the log */
     int dropped;                /* things lost to the fixed-size tables above */
+    int cyc_capped;             /* cycle enumeration hit a limit: some cycles may be missing */
 };
 extern struct graph g;
 
