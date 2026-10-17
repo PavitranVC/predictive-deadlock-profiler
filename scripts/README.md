@@ -34,3 +34,6 @@ Core sets above `nproc` are skipped with a warning. RT policies need root/CAP_SY
 - **Timeout = hang.** A 5 s limit may misclassify a very slow but live run; `error` outcomes are not counted as hangs.
 - **Pinning changes thread count effects:** `taskset -c 0` forces threads to interleave only by preemption, which is the point but not typical.
 - Stub-free: committed scripts were smoke-tested only; real numbers come from the real test binaries.
+
+## Demo
+`scripts/demo.sh` is the live viva walkthrough (build, clean pass, hang with top/gdb, `pdp analyze` prediction, `pdp confirm`, fixed version, gate-lock filtering, results chart). It pauses at each step; `DEMO_NOPAUSE=1 scripts/demo.sh` runs straight through. Uses a temp dir removed on exit; gdb is skipped if ptrace is not permitted.
