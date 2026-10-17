@@ -135,6 +135,16 @@ Plain-English glossary and likely examiner questions. Each entry is written so y
 - **gdb**: the GNU debugger. The demo uses it in batch mode to print the stack of every thread of the hung program.
 - **`top -H`**: shows CPU use per thread. A deadlocked thread is asleep, so it shows about 0% CPU.
 
+### Process terms (how the work was done)
+
+- **Orchestrator**: the main session that plans each stage, starts the agents, and commits.
+- **Agent**: a separate Claude session with its own role file (`.claude/agents/*.md`), its own model, and a list of files it may write.
+- **Reviewer**: the agent that reads the code and writes a report, but never edits code.
+- **MUST-FIX / SHOULD-FIX / NIT**: how serious a review finding is. MUST-FIX is a bug or a claim that does not hold; NIT is style.
+- **WIP commit**: a commit made while a stage is unfinished, pushed so that work is not lost.
+- **Merge**: joining two branches' histories into one; here, the experimenter branch joined the main line.
+- **STATUS board**: `docs/STATUS.md`, the one shared file where each agent records its own state.
+
 ## Likely examiner questions
 
 **1. Why not use a pthread mutex to guard the thread table?**
@@ -295,3 +305,6 @@ Only partly, and we say so. Each cell's 200 runs were back-to-back, and `loaded`
 
 **52. Why was the experiment not run on WSL2, the platform of the course?**
 The full run was done on a cloud VM with 4 vCPUs (`results/env.txt`), not on WSL2. The result is a different kernel and a different virtualisation layer, so absolute rates are not comparable to WSL2. The scheduler and core-count trends are the claim, and the WSL2 rerun with the randomised-block script is the check. This limit is written in the threats section of `docs/stages/stage-5.md`.
+
+**53. How did you organise the work, and what did review change?**
+The work used an orchestrator (the main session) and four agents with separate roles: a builder (writes `src/`, `tests/` and the Makefile), an experimenter (writes `scripts/` and `results/`), a docs agent (writes only `docs/`), and a reviewer (reads code and writes reports, never edits code). Each stage followed one loop: the builder writes, `make test` must pass, the reviewer reports, the builder fixes, the docs agent records, then we commit. A separate session wrote the experiment scripts and ran the 10,800-run experiment on its own branch, which was merged into the main line. Review changed real decisions: the cycle search (three-colour DFS to per-start-node enumeration), the gate test (common gate to the pairwise GoodLock rule), the watchdog (self-edges skipped, a cycle must persist for 3 scans), the confirmer (exit 42 is not enough without the program's own DEADLOCK line), and the measurement method (in-process timing, randomised block order, no silent CSV overwrite). `docs/PROCESS.md` has the full table, and `docs/TIMELINE.md` lists every commit in order.

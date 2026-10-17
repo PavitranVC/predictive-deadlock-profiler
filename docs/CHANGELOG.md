@@ -6,9 +6,10 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 
 - Project README: goal, prior art, and the planned pipeline (interceptor, analyzer, confirmer, experiment harness).
 - `.gitignore`, status board `docs/STATUS.md`.
-- Agent definitions under `.claude/agents/` (builder, reviewer, docs, experimenter, orchestrator) with role rules.
+- Agent definitions under `.claude/agents/` (builder, reviewer, docs, experimenter) with role rules. The orchestrator is the
+  main session, not a file; it has no definition under `.claude/agents/`.
 
-## Stage 1 — LD_PRELOAD interceptor (2026-10-17, commit `891e236`, WIP)
+## Stage 1 — LD_PRELOAD interceptor (2026-10-17, commits `891e236` WIP, `3b02523` final)
 
 - `src/libpdp.so` (`src/libpdp.c`): hooks for `pthread_mutex_lock`, `pthread_mutex_unlock`,
   `pthread_mutex_trylock`, `pthread_mutex_destroy`, `sem_wait`, `sem_post`, resolved with `dlsym(RTLD_NEXT)`.
@@ -24,7 +25,7 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Build: `make`, `make test` (`tests/basic.c`, `tests/overflow.c`, `tests/check_basic.sh`). Passes on gcc 13.3, glibc 2.39.
 - Open: `fork()`, `pthread_atfork`, condvar and timed-lock hooks, semaphore edge rules, spin-loop backoff.
 
-## Stage 2 — analyzer `pdp-analyze` (2026-10-17, not committed, WIP)
+## Stage 2 — analyzer `pdp-analyze` (2026-10-17, commits `a8a3cfb` WIP, `3526c8d` final)
 
 - `src/analyze.c`: parses `pdp.log` (sorted by `seq`, `held=?` skipped and counted), builds the lock-order graph
   from REQ events (edge = tid, call site, held set, count), lock identity = address + generation (DESTROY).
@@ -41,7 +42,7 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Review fixes (`docs/reviews/stage-2.md`): MUST-FIX 1-4 fixed; SHOULD-FIX 5, 6, 7, 11 fixed; 8, 9 partly; 10 open.
   Details in `docs/stages/stage-2.md`.
 
-## Stage 3 — ground-truth test suite (2026-10-17, commit `09cda59`)
+## Stage 3 — ground-truth test suite (2026-10-17, commits `7a5b444` WIP, `fd35b2b` review, `09cda59` final, `f0028d3` and `6d99610` docs)
 
 - Five test programs in `tests/` with known ground truth: `bank.c` (real 2-cycle), `sem_sq.c` (real 2-cycle on
   binary semaphores S, Q), `gate.c` (opposite order under gate lock `gate_G`, FILTERED), `philo_naive.c` (real
@@ -63,7 +64,7 @@ All notable changes to PDP, one entry per stage. Newest stage last.
   `ccr-b8583290-l43ezk-experiments`, commit `e969aba`) and merged into the main branch (merge `7e357a9`). They are
   not part of Stage 3 and are not described here beyond this note.
 
-## Stage 4 — confirmer (2026-10-17, commits `73b455e`, `d2b9e15`, `c8712fb`)
+## Stage 4 — confirmer (2026-10-17, commits `73b455e` WIP, `d2b9e15` review, `c8712fb` fixes, `6781836` docs)
 
 - Directed delay injection: `PDP_DELAY_SITE` (comma-separated `module+0xoff` sites) and `PDP_DELAY_US` (default
   100000). A thread that already holds a lock sleeps before requesting a lock from a listed site. Sites come from
@@ -86,7 +87,7 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Known limits: semaphores have no true owner (`src/pdp.h`); a real one-thread relock deadlock is missed; cond_wait and
   timedlock are invisible to the watchdog; a forked child has no watchdog.
 
-## Stage 5 — experiment harness and results (2026-10-17, commits `e969aba`, `7e357a9`, `dfe6a7b`, `9742098`, `1228caa`)
+## Stage 5 — experiment harness and results (2026-10-17, commits `f0b7c28`, `19d3249`, `e969aba` scripts from the parallel session, `7e357a9` and `b182568` merges, `fe5def7` review, `dfe6a7b` fixes, `9742098` and `1228caa` results, `2c9ade3` docs)
 
 - Harness: `scripts/run_experiment.sh` (native race runs, no LD_PRELOAD, `ITER=1000`, `TIMEOUT_S=1`, start barrier
   in race mode), `scripts/overhead.sh` (`philo_ordered` and `gate`, baseline vs `LD_PRELOAD`), `scripts/helgrind.sh`,
@@ -111,7 +112,7 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Still open from the review: `error` column in plot.py, timeout-validity table in plot.py, NIT items.
 - Docs: `docs/stages/stage-5.md`, `docs/arch/arch-v5.dot` and `.png`.
 
-## Stage 6 — live demo (2026-10-17, commits pending)
+## Stage 6 — live demo (2026-10-17, commits `4a930ec` WIP, `4339dbf` bank_fixed, `fe5def7` review, `dfe6a7b` fixes, `2c9ade3` docs and README)
 
 - `scripts/demo.sh`: build, clean pass, hang with top and gdb, `pdp run` and `pdp analyze` prediction, `pdp confirm`
   with baseline, fixed version, gate-lock filtering, results chart. Pauses per step; `DEMO_NOPAUSE=1` runs straight
@@ -119,3 +120,9 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Review fixes: ptrace_scope reason and fix printed (and `sudo -n gdb` when available); check that `bank slow` hung;
   INT/TERM trap exits with 130; colours only on a terminal.
 - Docs: `docs/stages/stage-6.md` (step-by-step walkthrough, fallbacks, two-minute viva script).
+
+## Branch — work moved to `main` (2026-10-17)
+
+- Work moved to `main`. `main` was created from `ccr-b8583290-l43ezk` at `2c9ade3`.
+- The experimenter branch `ccr-b8583290-l43ezk-experiments` is fully merged (`7e357a9`, and the fixed scripts in `b182568`).
+- Commit references above were checked against the commit list; see `docs/TIMELINE.md` for every commit in order.

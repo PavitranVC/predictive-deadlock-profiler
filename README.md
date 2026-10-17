@@ -99,6 +99,8 @@ confidence intervals, to how often a real deadlock shows up natively under diffe
 - `docs/stages/stage-1.md` to `stage-6.md`: what each stage built, why, and the viva explanation. Stage 5 has the full results; Stage 6 has the demo walkthrough.
 - `docs/VIVA.md`: glossary and likely examiner questions.
 - `docs/CHANGELOG.md`: one entry per stage.
+- `docs/TIMELINE.md`: every commit in order, and which architecture diagram goes with which stage.
+- `docs/PROCESS.md`: how the project was built (agents, review loop, design decisions changed by review).
 - `docs/arch/arch-v5.png`: the final architecture (earlier versions are kept as `arch-v1` to `arch-v4`).
 - `docs/reviews/`: the reviewer reports for each stage.
 - `scripts/README.md`: the experiment scripts, CSV columns and the threats to validity.
