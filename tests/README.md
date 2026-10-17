@@ -21,6 +21,7 @@ Exit status is 0 on completion.
 | program | ground truth |
 |---------|--------------|
 | `bank.c` | A->B vs B->A: real 2-cycle |
+| `bank_fixed.c` | bank with PDP's suggested order (acct_b, then acct_a) in both tellers: no cycle, never hangs |
 | `sem_sq.c` | semaphores S,Q taken in opposite order: real 2-cycle |
 | `gate.c` | same opposite order but under global mutex `gate_G`: FILTERED, never hangs |
 | `philo_naive.c` | 5 philosophers, left then right fork: real 5-cycle |

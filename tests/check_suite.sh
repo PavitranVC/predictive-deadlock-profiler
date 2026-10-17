@@ -35,6 +35,9 @@ grep -q 'fork0' <<<"$line" || fail "philo_naive: cycle does not name fork0"
 want gate 0 "FILTERED" "gate lock gate_G" "No deadlock potential" "3 locks, 6 edges"
 grep -q "REAL" <<<"$OUT" && fail "gate reported REAL"
 
+want bank_fixed 0 "No deadlock potential" "2 locks, 2 edges"
+grep -qE "REAL|FILTERED" <<<"$OUT" && fail "bank_fixed reports a cycle"
+
 want philo_ordered 0 "No deadlock potential" "5 locks, 5 edges"
 grep -qE "REAL|FILTERED" <<<"$OUT" && fail "philo_ordered reports a cycle"
 
@@ -59,7 +62,7 @@ for p in bank sem_sq philo_naive; do
     run 2 tests/bin/$p slow; [ $? -eq 124 ] || fail "$p slow should hang (124)"
 done
 # gate and philo_ordered must NEVER hang, in any mode
-for p in gate philo_ordered prodcons recursive; do
+for p in gate philo_ordered bank_fixed prodcons recursive; do
     run 5 tests/bin/$p slow; [ $? -eq 0 ] || fail "$p slow should exit 0"
     run 5 tests/bin/$p race 200; [ $? -eq 0 ] || fail "$p race should exit 0"
 done

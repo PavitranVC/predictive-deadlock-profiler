@@ -3,7 +3,7 @@ CFLAGS  = -Wall -Wextra -O1 -g -fPIC
 TESTCF  = -Wall -Wextra -g -pthread -fPIE -pie
 # PIE: site offsets assume it (see pdp.h). No -O so call-site line numbers stay exact.
 
-all: build/libpdp.so build/pdp-analyze build/pdp tests/bin/basic tests/bin/overflow tests/bin/bank tests/bin/sem_sq tests/bin/gate tests/bin/philo_naive tests/bin/philo_ordered tests/bin/prodcons tests/bin/recursive
+all: build/libpdp.so build/pdp-analyze build/pdp tests/bin/basic tests/bin/overflow tests/bin/bank tests/bin/bank_fixed tests/bin/sem_sq tests/bin/gate tests/bin/philo_naive tests/bin/philo_ordered tests/bin/prodcons tests/bin/recursive
 
 build/libpdp.so: src/libpdp.c src/pdp.h
 	@mkdir -p build

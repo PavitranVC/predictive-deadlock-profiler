@@ -13,7 +13,7 @@ for p in bank sem_sq philo_naive; do
 done
 
 # Nothing to confirm when no cycle is predicted (or it is gated).
-for p in gate philo_ordered; do
+for p in gate philo_ordered bank_fixed; do
     log=tests/bin/$p.confirm.log
     timeout 10 ./build/pdp run -o "$log" "./tests/bin/$p" seq >/dev/null || fail "$p: seq run failed"
     out=$(./build/pdp confirm --log "$log" "./tests/bin/$p" race 1); rc=$?
@@ -39,6 +39,7 @@ neg() {
 }
 neg "gate race"          tests/bin/gate race 200
 neg "philo_ordered race" tests/bin/philo_ordered race 200
+neg "bank_fixed race"    tests/bin/bank_fixed race 200
 neg "prodcons race"      tests/bin/prodcons race 200
 neg "prodcons slow"      tests/bin/prodcons slow
 neg "recursive race"     tests/bin/recursive race 300000
