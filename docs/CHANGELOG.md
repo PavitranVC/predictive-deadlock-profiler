@@ -126,3 +126,22 @@ All notable changes to PDP, one entry per stage. Newest stage last.
 - Work moved to `main`. `main` was created from `ccr-b8583290-l43ezk` at `2c9ade3`.
 - The experimenter branch `ccr-b8583290-l43ezk-experiments` is fully merged (`7e357a9`, and the fixed scripts in `b182568`).
 - Commit references above were checked against the commit list; see `docs/TIMELINE.md` for every commit in order.
+
+## Stage 5 addendum — WSL2 replication (2026-10-17, results commit `4e2e80b`, docs commit pending)
+
+- `results/wsl2/`: the full matrix on WSL2 (Intel Core Ultra 9 275HX, 22 vCPUs, kernel 6.6 WSL2). 10,800 runs,
+  200 per cell, 0 errors. Randomised block order (block 10, seed 3464). Load: `stress-ng --cpu n` pinned to the core
+  set (the cloud run used bash busy loops, a confound). Also `overhead.csv`, `helgrind.csv`, `env.txt`, and the charts.
+  Code at commit `b96f9a5`.
+- Replicated on both machines: 0 hangs on one core (36 cells); the default scheduler with load hides the bug on two
+  cores (bank 67.0% to 0.5%, sem_sq 73.0% to 1.0% on WSL2); real-time scheduling with load exposes it at 99.0% to
+  100.0% in all 16 loaded bank and sem_sq cells with two or four cores; Helgrind's result is identical.
+- Observed differences, not explained: four-core idle rates for bank and sem_sq (57 to 68% on WSL2, about 94% on cloud);
+  philo_naive on two real-time cores (1.0 to 2.0% idle on WSL2, 43.5 to 45.0% on cloud). Candidate causes are
+  hypotheses only (`docs/stages/stage-5.md`, "WSL2 replication").
+- Overhead on WSL2: 1.5 to 3.1 us per lock operation (cloud 6.7 to 11.3 us); wall ratio 12x to 33x (cloud 18x to 141x).
+- Caveat: on WSL2 every finished run took 104 to 106 ms, a fixed floor, so the elapsed column does not measure the work
+  there. The hang separation still holds (106 ms against 1005 ms).
+- Docs: `docs/stages/stage-5.md` (WSL2 replication section), `README.md` (headline results), `docs/VIVA.md` (updated
+  answers and questions 54 to 56). No new architecture version: this addendum changes results and docs, not the design,
+  so `arch-v5` still applies.

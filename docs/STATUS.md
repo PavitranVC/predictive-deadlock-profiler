@@ -9,7 +9,7 @@ Every agent reads this first and updates ONLY its own line.
 - orchestrator: all stages committed and pushed.
 - builder: Stage 4 + bank_fixed done
 - experimenter: done (remote session finished; results merged)
-- docs: completeness pass done (CHANGELOG commit refs and branch entry, TIMELINE.md, PROCESS.md, README and VIVA links). Not committed.
+- docs: WSL2 replication integrated (stage-5.md section, README headline, VIVA answers 44-56, CHANGELOG, TIMELINE). Commit pending, not committed. Done/Next lines left for orchestrator: Done += WSL2 results (4e2e80b); Next = final whole-project review, demo rehearsal.
 - reviewer: Stage 5/6 reviewed -> docs/reviews/stage-5-6.md; 4 MUST-FIX (INT/TERM trap resumes loop and mislabels loaded runs, results CSVs overwritten, overhead ignores exit status, overhead timing ms-quantised/conflates startup), 11 SHOULD-FIX, 10 NIT.
 
 ## Blockers
