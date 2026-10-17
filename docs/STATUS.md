@@ -7,7 +7,7 @@ Every agent reads this first and updates ONLY its own line.
 
 ## Agent lines
 - orchestrator: Stage 0 done; launching Stage 1.
-- builder: idle
+- builder: Stage 1 done; make && make test PASS (src/libpdp.c 232 lines). Not committed.
 - experimenter: idle
 - docs: idle
 - reviewer: idle
