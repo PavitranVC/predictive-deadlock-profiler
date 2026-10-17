@@ -11,11 +11,14 @@ TMP="$(mktemp -d)"
 BGPID=""
 cleanup() { [ -n "$BGPID" ] && kill -9 "$BGPID" 2>/dev/null; rm -rf "$TMP"; }
 trap cleanup EXIT
+trap 'exit 130' INT TERM   # Ctrl-C ends the demo (timeout runs children in another process group)
+# Colours only on a terminal (avoid ^[[1;36m in pipes/recordings).
+if [ -t 1 ]; then C1=$'\033[1;36m'; C2=$'\033[33m'; C3=$'\033[1;32m'; C0=$'\033[0m'; else C1=; C2=; C3=; C0=; fi
 
 # step N "title" "what to notice": coloured banner, one-line note, then pause.
 step() {
-  printf '\n\033[1;36m=== Step %s: %s ===\033[0m\n' "$1" "$2"
-  printf '\033[33mNotice: %s\033[0m\n' "$3"
+  printf '\n%s=== Step %s: %s ===%s\n' "$C1" "$1" "$2" "$C0"
+  printf '%sNotice: %s%s\n' "$C2" "$3" "$C0"
   if [ "${DEMO_NOPAUSE:-0}" != 1 ]; then read -rp "[enter]" _; fi
 }
 
@@ -34,11 +37,26 @@ sleep 1
 echo "--- top (per thread) ---"
 timeout 5 top -b -n1 -H -p "$BGPID" | head -12
 echo "--- gdb backtraces (filtered) ---"
-if command -v gdb >/dev/null 2>&1 && timeout 20 gdb -batch -p "$BGPID" -ex 'thread apply all bt' >"$TMP/gdb.txt" 2>&1 \
-   && grep -q 'Thread' "$TMP/gdb.txt"; then
-  grep -E 'Thread |pthread_mutex_lock|__lll_lock_wait|teller' "$TMP/gdb.txt"
+if ! kill -0 "$BGPID" 2>/dev/null; then
+  echo "(bank slow did not hang this time; re-run the demo)"
+elif ! command -v gdb >/dev/null 2>&1; then
+  echo "(gdb not installed: sudo apt install gdb)"
 else
-  echo "(gdb unavailable or ptrace not permitted; skipping)"
+  # Yama ptrace_scope>0 forbids attaching to a non-child process unless root.
+  GDB="gdb"
+  PTS="$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo 0)"
+  if [ "$PTS" != 0 ] && [ "$(id -u)" != 0 ]; then
+    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then GDB="sudo -n gdb"
+    else GDB=""; echo "(ptrace_scope=$PTS blocks gdb attach. Fix: sudo sysctl kernel.yama.ptrace_scope=0   -- reverts on reboot)"; fi
+  fi
+  if [ -n "$GDB" ]; then
+    if timeout 20 $GDB -batch -p "$BGPID" -ex 'thread apply all bt' >"$TMP/gdb.txt" 2>&1 \
+       && grep -q 'Thread' "$TMP/gdb.txt"; then
+      grep -E 'Thread |pthread_mutex_lock|__lll_lock_wait|teller' "$TMP/gdb.txt"
+    else
+      echo "(gdb attach failed; skipping)"
+    fi
+  fi
 fi
 kill -9 "$BGPID" 2>/dev/null; wait "$BGPID" 2>/dev/null; BGPID=""
 
@@ -49,12 +67,11 @@ timeout 30 build/pdp analyze "$TMP/bank.log"
 
 # ---- 4. confirm -----------------------------------------------------------
 step 4 "Confirm the prediction" "a concurrent run really deadlocks; compare with the baseline hang rate."
-timeout 120 build/pdp confirm --log "$TMP/bank.log" --baseline -n 10 ./tests/bin/bank race 1
+timeout --foreground 120 build/pdp confirm --log "$TMP/bank.log" --baseline -n 10 ./tests/bin/bank race 1
 
 # ---- 5. fixed version -----------------------------------------------------
 step 5 "Fixed version is clean" "no cycle predicted, and the slow schedule now finishes."
 FIXED=tests/bin/bank_fixed
-for _ in 1 2 3 4 5; do [ -x "$FIXED" ] && break; sleep 1; done
 if [ -x "$FIXED" ]; then
   timeout 30 build/pdp run -o "$TMP/fixed.log" "$FIXED" seq
   timeout 30 build/pdp analyze "$TMP/fixed.log"
@@ -82,5 +99,5 @@ else
   elif command -v xdg-open >/dev/null 2>&1 && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then xdg-open "$chart" >/dev/null 2>&1 &
   else echo "Open this file: $ROOT/$chart"; fi
 fi
-printf '\n\033[1;32mDemo complete.\033[0m\n'
+printf '\n%sDemo complete.%s\n' "$C3" "$C0"
 exit 0

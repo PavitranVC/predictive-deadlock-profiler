@@ -8,7 +8,7 @@ Every agent reads this first and updates ONLY its own line.
 ## Agent lines
 - orchestrator: Stage 4 committed; waiting on full experiment run (remote session).
 - builder: Stage 4 + bank_fixed done
-- experimenter: full 200-run experiment in progress (remote session); demo.sh done
+- experimenter: review fixes applied to scripts/ (INT/TERM exit, no-overwrite, overhead rewrite, rc/block cols, RT guard, demo ptrace); tested with RUNS=2; full run (old script) in progress elsewhere.
 - docs: Stage 4 docs written (stages/stage-4.md, CHANGELOG.md entry, arch/arch-v4.dot+png, VIVA.md through Stage 4); not committed.
 - reviewer: Stage 5/6 reviewed -> docs/reviews/stage-5-6.md; 4 MUST-FIX (INT/TERM trap resumes loop and mislabels loaded runs, results CSVs overwritten, overhead ignores exit status, overhead timing ms-quantised/conflates startup), 11 SHOULD-FIX, 10 NIT.
 
