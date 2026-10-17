@@ -85,3 +85,37 @@ All notable changes to PDP, one entry per stage. Newest stage last.
   `docs/stages/stage-4.md`.
 - Known limits: semaphores have no true owner (`src/pdp.h`); a real one-thread relock deadlock is missed; cond_wait and
   timedlock are invisible to the watchdog; a forked child has no watchdog.
+
+## Stage 5 — experiment harness and results (2026-10-17, commits `e969aba`, `7e357a9`, `dfe6a7b`, `9742098`, `1228caa`)
+
+- Harness: `scripts/run_experiment.sh` (native race runs, no LD_PRELOAD, `ITER=1000`, `TIMEOUT_S=1`, start barrier
+  in race mode), `scripts/overhead.sh` (`philo_ordered` and `gate`, baseline vs `LD_PRELOAD`), `scripts/helgrind.sh`,
+  `scripts/plot.py` (Wilson 95% intervals), `scripts/runtime_ns.py`.
+- **Full run, 10,800 runs, 0 errors** (3 binaries x 3 schedulers x 3 core sets x idle/loaded x 200 runs), cloud VM
+  (not WSL2), 4 vCPUs, bash busy-loop load. Data: `results/manifest.csv`, `results/env.txt`, charts
+  `results/hangrate_{bank,sem_sq,philo_naive}.png`.
+- Findings (hypotheses marked in `docs/stages/stage-5.md`): 0% on one core for every config; more cores raise the
+  rate; load hides the bug under the default scheduler (bank on 2 cores 64.0% to 0.5%) and exposes it under
+  SCHED_FIFO and SCHED_RR (bank on 2 cores to 99 to 100%).
+- Overhead: median 6.7 to 11.3 us per lock operation; wall-time ratio 18x to 141x on lock-only microbenchmarks.
+  Results in `results/overhead.csv`, chart `results/overhead.png`.
+- Helgrind baseline (`results/helgrind.csv`): flags bank and philo_naive, misses sem_sq (no semaphore lock-order
+  support), flags gate (false positive). PDP catches all three real cycles and filters gate.
+- **Caveat:** the full manifest was produced with the pre-fix `run_experiment.sh` (fixed cell order, not
+  block-randomised). The WSL2 rerun uses the fixed script.
+- Review fixes (`docs/reviews/stage-5-6.md`) applied to `scripts/`: INT/TERM trap exits instead of resuming the loop
+  (MUST 1); no silent overwrite of CSVs, `FORCE=1` to override (MUST 2); overhead rc column and error rows excluded
+  (MUST 3); overhead timing in ns, pair order randomised, ITER swept (MUST 4); raw exit code recorded, 137 classified
+  by elapsed time (SHOULD 5); randomised block order with `block` and `ts` columns (SHOULD 6); RT guard on
+  `sched_rt_runtime_us` (SHOULD 7); fuller `env.txt` (SHOULD 8).
+- Still open from the review: `error` column in plot.py, timeout-validity table in plot.py, NIT items.
+- Docs: `docs/stages/stage-5.md`, `docs/arch/arch-v5.dot` and `.png`.
+
+## Stage 6 — live demo (2026-10-17, commits pending)
+
+- `scripts/demo.sh`: build, clean pass, hang with top and gdb, `pdp run` and `pdp analyze` prediction, `pdp confirm`
+  with baseline, fixed version, gate-lock filtering, results chart. Pauses per step; `DEMO_NOPAUSE=1` runs straight
+  through. Temp directory removed on exit.
+- Review fixes: ptrace_scope reason and fix printed (and `sudo -n gdb` when available); check that `bank slow` hung;
+  INT/TERM trap exits with 130; colours only on a terminal.
+- Docs: `docs/stages/stage-6.md` (step-by-step walkthrough, fallbacks, two-minute viva script).

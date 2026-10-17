@@ -1,4 +1,4 @@
-# VIVA prep — PDP (through Stage 4)
+# VIVA prep — PDP (through Stage 6)
 
 Plain-English glossary and likely examiner questions. Each entry is written so you can say it out loud.
 
@@ -103,6 +103,37 @@ Plain-English glossary and likely examiner questions. Each entry is written so y
 - **Producer/consumer**: one thread makes items and posts a semaphore, another waits on it and takes them. The semaphore carries a signal, not a lock, so it has no owner. `tests/prodcons.c`.
 - **Recursive mutex**: a mutex the owner may lock again. Each lock adds to a count, and each unlock removes one. `PTHREAD_MUTEX_RECURSIVE` in `tests/recursive.c`.
 - **ERRORCHECK mutex**: a mutex that returns `EDEADLK` when its owner relocks it, instead of blocking. This is how a program can tell a self-deadlock from a recursive relock.
+
+### Stage 5 and 6 terms (experiments and demo)
+
+- **Scheduler**: the part of the kernel that decides which runnable thread runs on which core, and for how long.
+- **CFS / EEVDF**: Linux's default ("normal") scheduler. CFS (Completely Fair Scheduler) gives each runnable thread a fair share of CPU time. Kernels from 6.6 on use EEVDF (Earliest Eligible Virtual Deadline First), which replaced CFS's pick rule but keeps the fair-share idea. Our kernel is 6.18, so EEVDF. In the experiments we call this policy `default`.
+- **SCHED_FIFO**: a real-time policy. A thread runs until it blocks, finishes, or a higher-priority thread becomes runnable. Threads of equal priority never share the CPU by time slicing.
+- **SCHED_RR**: a real-time round-robin policy. Like FIFO, but threads of equal priority take turns in fixed slices (the RR quantum, 100 ms by default).
+- **Real-time priority**: a number from 1 to 99 for SCHED_FIFO and SCHED_RR. Any real-time thread beats every normal thread, whatever the normal thread's priority.
+- **`chrt`**: a command that starts a program under a given policy and priority, for example `chrt -f 50 ./prog` for FIFO at priority 50.
+- **`taskset`**: a command that sets which cores a process may run on, for example `taskset -c 0-1 ./prog`.
+- **CPU affinity**: the set of cores a thread is allowed to run on. `taskset` sets it. Our "core sets" (`0`, `0-1`, `0-3`) are affinities.
+- **Timeslice (quantum)**: the time a thread may run before the scheduler may switch to another thread of the same priority. Normal threads get a slice that depends on how many are runnable; RR has a fixed one.
+- **Preemption**: the scheduler stops a running thread before it blocks or ends, so another thread can run. Real-time threads preempt normal threads at once.
+- **Load (in our experiment)**: extra busy processes, one per core in the test's core set. `idle` means none, `loaded` means one busy bash loop per core.
+- **Hang rate**: the number of runs that were still alive after the timeout, divided by the number of runs.
+- **Binomial proportion**: a count of "successes" out of n independent trials. A hang rate of 128 hung out of 200 runs is one.
+- **Confidence interval**: a range computed from the data that, under repeated sampling, contains the true rate about 95% of the time. We print one next to every rate.
+- **Wilson interval (score interval)**: a 95% confidence interval for a proportion that stays between 0 and 1 and is still accurate when the count is 0 or n. We use it for all hang rates.
+- **Wald interval**: the simple textbook interval, p plus or minus 1.96 times the square root of p(1-p)/n. It has zero width at 0 out of n and n out of n, which is wrong, so we do not use it.
+- **Valgrind**: a framework that runs a program on a synthetic CPU, so tools can watch every memory access and call. It is slow, often 10 to 50 times.
+- **Helgrind**: a Valgrind tool that looks for data races and lock-order violations while the program runs. It reports a lock pair taken in both orders by different threads.
+- **Overhead**: the extra time or memory a tool adds to a program. We report it two ways: the wall-time ratio, and the cost per lock operation in microseconds.
+- **Per-operation cost**: the time PDP adds per lock call, computed as (time with PDP minus time without) divided by the number of lock operations in the same pair of runs.
+- **Threats to validity**: the reasons a result might be wrong or might not carry over to another machine (the platform, the sample, how it was measured, fixed parameters).
+- **Start barrier**: a `pthread_barrier_t` that holds all threads until they have all been created, so they start together. Without it we would measure thread-creation delay.
+- **ITER**: how many lock, work, unlock rounds each thread does in race mode. We fixed it at 1000.
+- **Heisenbug**: a bug that changes or disappears when someone looks at it, for example under a debugger or with extra logging.
+- **Probe effect**: the observer changes what it observes. PDP's logging adds time between lock calls, which can hide a deadlock that happens without it, or create one that does not.
+- **Yama `ptrace_scope`**: a Linux setting that limits which processes may attach a debugger to which others. 1 (often the default on Ubuntu and WSL2) allows attaching only to your own child processes. Our demo's gdb attach can fail because of it.
+- **gdb**: the GNU debugger. The demo uses it in batch mode to print the stack of every thread of the hung program.
+- **`top -H`**: shows CPU use per thread. A deadlocked thread is asleep, so it shows about 0% CPU.
 
 ## Likely examiner questions
 
@@ -237,3 +268,30 @@ The baseline runs the same N times with no delay. For bank it gave 0/10, while t
 
 **43. Why is the watchdog thread started lazily, on the first lock call?**
 A program that never locks gets no extra thread. Creating a thread inside the first hooked call is safe because the call is made with the hook flag set and without the table lock, so `pthread_create` cannot call back into our hooks. The review checked this. The same check (only one thread wins the atomic exchange) stops two threads from creating two watchdogs.
+
+**44. Why does load hide the bug under the default scheduler but expose it under SCHED_FIFO and SCHED_RR?**
+This is the main finding, and it is a hypothesis, not a proof. Under the default scheduler, the busy loops (one per core, same core set) take their turn with the two tellers. Each teller gets a slice, runs its loop quickly, and their lock windows rarely overlap, so the bad interleaving is rarer. Under FIFO and RR, the test threads are real-time, so they preempt the normal-priority loops at once. Both tellers then run truly in parallel on their cores, and the bad interleaving becomes almost certain: bank on two cores goes from 75.0% idle to 100.0% loaded under FIFO. What we measured: the direction of the effect differs by policy, for all three binaries. What we did not measure: the scheduler's behaviour itself (we did not trace preemption), so the mechanism is the thing to test in the WSL2 rerun.
+
+**45. Why 0% on one core, for every scheduler?**
+With one core the two threads can only overlap if the scheduler preempts one of them while it holds its first lock, and then runs the other. A run is only a few milliseconds, so there are few such chances. Under FIFO and RR it is even less likely: equal-priority threads are never time-sliced against each other, so one teller tends to finish before the other starts. We have a hypothesis for this and no trace. The result is 0 of 200 in all 18 one-core cells, so it is a strong, repeatable pattern on this machine. It also means the one-core configuration is useless for testing the bug, which is the point of the experiment.
+
+**46. Is PDP's overhead acceptable?**
+It depends on what you compare to. On lock-only microbenchmarks, PDP costs about 7 to 11 microseconds per lock operation, and the wall time grows 18 to 141 times. That is too slow for a production lock path, and the factor is large because these programs do almost nothing except lock. For a real program that does real work between locks, the relative cost is much smaller, but we did not measure a real application. We think the cost is mostly the one `write()` system call per event, plus the spin lock and the `dladdr` call per site. The fix we would make is per-thread in-memory buffers, which removes the syscall from the lock path. So: acceptable for finding bugs in a test run, not for leaving on in production.
+
+**47. Why does Helgrind miss sem_sq but flag gate?**
+Helgrind tracks lock order for mutexes. It does not model a semaphore as a lock with an owner, so the `sem_wait`/`sem_post` cycle in sem_sq is invisible to it. PDP treats semaphore waits and posts as lock edges, so it sees the cycle. The gate case is the reverse. Helgrind does not know that both orders are taken while holding a common gate lock, so it reports an order violation that cannot actually interleave. PDP's filter checks the held sets, sees the common gate, and marks the cycle FILTERED. Neither result is a bug in Helgrind; they show that the two tools model different things.
+
+**48. What is your contribution compared with DeadlockFuzzer?**
+DeadlockFuzzer (Joshi et al., PLDI 2009) already predicts from a trace and then steers the scheduler at the cycle's statements to make the deadlock happen. Predict-and-confirm is therefore prior art, and our confirmer borrows the idea. What we add is the scheduling study: a measured answer, with confidence intervals, to how often the bug shows up natively under different schedulers, core counts and loads, plus a live watchdog that confirms the wait-for cycle from the program's state. We do not claim the predict-and-confirm method itself as new.
+
+**49. How do you know a run that takes a long time is a hang and not a slow run?**
+We do not, in general. The timeout is the detector, so a slow but live run would be counted as hung. In this run the slowest run that finished took 76 ms (99th percentile 20 ms), and the fastest timeout took 1003 ms. The gap is more than tenfold, so the classification is safe for these binaries at this ITER. That is an assumption backed by the data, and a future run should check the maximum time of finished runs in each cell.
+
+**50. Why Wilson intervals and not the normal (Wald) approximation?**
+Our rates are proportions from 200 runs, and many are 0 or 100%. The Wald interval has zero width at 0 out of n and n out of n, which claims a certainty we do not have. The Wilson interval stays inside 0 to 100% and gives a sensible width at the ends. For 0 of 10 it gives [0, 27.8%], which is the honest answer: the data cannot rule out a rate of 25%.
+
+**51. Is the full experiment valid, given that it ran in a fixed order?**
+Only partly, and we say so. Each cell's 200 runs were back-to-back, and `loaded` came straight after `idle`. Any drift over the hours of the run, such as host activity or thermal state, is confounded with the factor that changes. So the large differences (0% on one core, the load effect under RT) are strong, but small differences between neighbouring cells are not settled. The fix is the randomised-block design, now in the script, and the WSL2 rerun uses it.
+
+**52. Why was the experiment not run on WSL2, the platform of the course?**
+The full run was done on a cloud VM with 4 vCPUs (`results/env.txt`), not on WSL2. The result is a different kernel and a different virtualisation layer, so absolute rates are not comparable to WSL2. The scheduler and core-count trends are the claim, and the WSL2 rerun with the randomised-block script is the check. This limit is written in the threats section of `docs/stages/stage-5.md`.
