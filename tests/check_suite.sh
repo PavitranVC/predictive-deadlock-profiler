@@ -38,6 +38,13 @@ grep -q "REAL" <<<"$OUT" && fail "gate reported REAL"
 want philo_ordered 0 "No deadlock potential" "5 locks, 5 edges"
 grep -qE "REAL|FILTERED" <<<"$OUT" && fail "philo_ordered reports a cycle"
 
+# correct signalling / recursive programs: no cycle of any kind
+for p in prodcons recursive; do
+    analyze "$p"
+    [ "$RC" -eq 0 ] || fail "$p: exit $RC, want 0"
+    grep -qE "REAL" <<<"$OUT" && fail "$p reports a REAL cycle"
+done
+
 # exactly one cycle per real program (catches duplicate or rotated cycles)
 for p in bank sem_sq philo_naive; do
     analyze "$p"
@@ -52,7 +59,7 @@ for p in bank sem_sq philo_naive; do
     run 2 tests/bin/$p slow; [ $? -eq 124 ] || fail "$p slow should hang (124)"
 done
 # gate and philo_ordered must NEVER hang, in any mode
-for p in gate philo_ordered; do
+for p in gate philo_ordered prodcons recursive; do
     run 5 tests/bin/$p slow; [ $? -eq 0 ] || fail "$p slow should exit 0"
     run 5 tests/bin/$p race 200; [ $? -eq 0 ] || fail "$p race should exit 0"
 done

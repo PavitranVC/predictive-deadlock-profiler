@@ -54,6 +54,13 @@
  *   PDP_WATCHDOG=1  start a thread (on the first lock call) that checks every 50 ms for
  *                   a wait-for cycle. On finding one it writes the DEADLOCK line to
  *                   the log and stderr and exits the process with PDP_EXIT_DEADLOCK.
+ *                   A cycle must be seen in 3 consecutive scans (same threads) and a
+ *                   thread waiting on a lock it itself lists as held is ignored.
+ *                   LIMIT: a semaphore has no true owner (any thread may post), so the
+ *                   binary-semaphore model can still mislead in exotic signalling
+ *                   patterns, e.g. thread A waits on a sem that B "holds" from an old
+ *                   wait while B waits on one A "holds". Such a program is reported as
+ *                   a deadlock although a later post would free it.
  */
 #ifndef PDP_H
 #define PDP_H
