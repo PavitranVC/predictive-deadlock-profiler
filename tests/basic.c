@@ -12,7 +12,7 @@ static int counter;
 static void *worker(void *arg) {
     (void)arg;
     pthread_mutex_lock(&A);
-    pthread_mutex_lock(&B);
+    pthread_mutex_lock(&B);   /* SITE_B */
     counter++;
     pthread_mutex_unlock(&B);
     pthread_mutex_unlock(&A);

@@ -1,0 +1,44 @@
+// PDP architecture v1 (Stage 1). Solid = built, grey dashed = planned.
+digraph pdp_v1 {
+    rankdir=TB;
+    graph [fontname="Helvetica", fontsize=12, labelloc=t, pad=0.3, nodesep=0.5, ranksep=0.6];
+    node  [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#e8f0fe", color="#1a56a8"];
+    edge  [fontname="Helvetica", fontsize=10, color="#333333"];
+
+    label="PDP v1 - interceptor (Stage 1)";
+
+    prog [label="Unmodified C program\n(calls pthread_mutex_* / sem_*)", fillcolor="#ffffff"];
+
+    subgraph cluster_pdp {
+        label="libpdp.so (LD_PRELOAD)";
+        style="rounded,dashed"; color="#1a56a8"; fontcolor="#1a56a8";
+
+        hooks [label="Hooks\npthread_mutex_lock / unlock / trylock / destroy\nsem_wait / sem_post"];
+        table [label="Thread table\npdp_threads[64] (struct tcb)\nheld[16], waiting_on\nTLS: me, in_hook", fillcolor="#fff4d6", color="#b07d00"];
+        lock  [label="tbl_lock\ntest-and-set spin lock", shape=octagon, fillcolor="#fff4d6", color="#b07d00"];
+    }
+
+    glibc [label="Real glibc (libc.so.6)\npthread_mutex_* / sem_*\nfound by dlsym(RTLD_NEXT)", fillcolor="#e6f4ea", color="#1e7b3a"];
+    log   [label="pdp.log\n(O_APPEND, one write() per line)", shape=cylinder, fillcolor="#e6f4ea", color="#1e7b3a"];
+
+    prog -> hooks [label="calls (LD_PRELOAD\nresolves to hook)"];
+    hooks -> glibc [label="real call after REQ\n(dlsym RTLD_NEXT)"];
+    hooks -> table [label="update held /\nwaiting_on"];
+    table -> lock [label="under lock only", style=dotted, arrowhead=none];
+    hooks -> log [label="REQ / ACQ / REL /\nFAIL / TRY_* / POST"];
+
+    // Planned (not built yet)
+    subgraph cluster_future {
+        label="Planned";
+        style="rounded,dashed"; color="#999999"; fontcolor="#777777";
+
+        analyzer  [label="Analyzer (Stage 2)\nsort by seq, lock-order graph,\ncycles = predicted deadlocks\naddr2line on site", style="rounded,filled,dashed", fillcolor="#f2f2f2", fontcolor="#777777", color="#aaaaaa"];
+        confirmer [label="Confirmer\nre-run with targeted delays\n(delay hook at PDP_DELAY_SITE)", style="rounded,filled,dashed", fillcolor="#f2f2f2", fontcolor="#777777", color="#aaaaaa"];
+        experiment [label="Experiment harness\nscheduling policy, cores, load\nmeasure manifestation rate", style="rounded,filled,dashed", fillcolor="#f2f2f2", fontcolor="#777777", color="#aaaaaa"];
+    }
+
+    log -> analyzer [label="reads", style=dashed, color="#999999", fontcolor="#777777"];
+    analyzer -> confirmer [style=dashed, color="#999999", fontcolor="#777777", label="candidate cycles"];
+    confirmer -> hooks [label="delay injection", style=dashed, color="#999999", fontcolor="#777777"];
+    experiment -> confirmer [style=dashed, color="#999999", fontcolor="#777777", label="runs"];
+}

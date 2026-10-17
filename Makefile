@@ -1,8 +1,8 @@
 CC      ?= gcc
 CFLAGS  = -Wall -Wextra -O1 -g -fPIC
-TESTCF  = -Wall -Wextra -g -pthread
+TESTCF  = -Wall -Wextra -g -pthread -fPIE -pie   # PIE: site offsets assume it (see pdp.h)
 
-all: build/libpdp.so tests/bin/basic
+all: build/libpdp.so tests/bin/basic tests/bin/overflow
 
 build/libpdp.so: src/libpdp.c src/pdp.h
 	@mkdir -p build
@@ -11,6 +11,10 @@ build/libpdp.so: src/libpdp.c src/pdp.h
 tests/bin/basic: tests/basic.c
 	@mkdir -p tests/bin
 	$(CC) $(TESTCF) -o $@ tests/basic.c
+
+tests/bin/overflow: tests/overflow.c
+	@mkdir -p tests/bin
+	$(CC) $(TESTCF) -o $@ tests/overflow.c
 
 test: all
 	@bash tests/check_basic.sh
