@@ -36,11 +36,21 @@ static int iters = 1;       /* loop count per teller (race mode raises it) */
 
 /* The sleep only matters in slow mode: it gives the other teller time to grab
  * its first lock, which guarantees the circular wait. */
+/* Start barrier (race and slow modes only). WHY: without it thread 1 may run
+ * its whole loop before thread 2 even exists, so the experiment would measure
+ * thread-creation stagger instead of lock interleaving. The barrier makes all
+ * workers begin contending together. pthread_barrier_wait is NOT intercepted
+ * by PDP, so it adds no log events and no lock-order edges. */
+static pthread_barrier_t start_barrier;
+static int use_barrier;
+static void wait_for_start(void) { if (use_barrier) pthread_barrier_wait(&start_barrier); }
+
 static void pause_between_locks(void) { if (slow_mode) usleep(100 * 1000); }
 
 /* transfer(A, B): lock A, then B. */
 static void *teller1(void *arg) {
     (void)arg;
+    wait_for_start();
     for (int i = 0; i < iters; i++) {
         pthread_mutex_lock(&acct_a.lock);
         pause_between_locks();
@@ -55,6 +65,7 @@ static void *teller1(void *arg) {
 /* transfer(B, A): lock B, then A - the opposite order. */
 static void *teller2(void *arg) {
     (void)arg;
+    wait_for_start();
     for (int i = 0; i < iters; i++) {
         pthread_mutex_lock(&acct_b.lock);
         pause_between_locks();
@@ -70,7 +81,9 @@ int main(int argc, char **argv) {
     const char *mode = argc > 1 ? argv[1] : "seq";
     int concurrent = strcmp(mode, "race") == 0 || strcmp(mode, "slow") == 0;
     slow_mode = strcmp(mode, "slow") == 0;
+    use_barrier = concurrent;
     if (strcmp(mode, "race") == 0) iters = argc > 2 ? atoi(argv[2]) : 1000;
+    if (concurrent) pthread_barrier_init(&start_barrier, NULL, 2);
     pthread_t t1, t2;
     pthread_create(&t1, NULL, teller1, NULL);
     if (!concurrent) pthread_join(t1, NULL);    /* seq: finish teller 1 first */

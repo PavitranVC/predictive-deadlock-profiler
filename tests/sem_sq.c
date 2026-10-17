@@ -20,10 +20,20 @@
 static sem_t S, Q;
 static int slow_mode, iters = 1;
 
+/* Start barrier (race and slow modes only). WHY: without it thread 1 may run
+ * its whole loop before thread 2 even exists, so the experiment would measure
+ * thread-creation stagger instead of lock interleaving. The barrier makes all
+ * workers begin contending together. pthread_barrier_wait is NOT intercepted
+ * by PDP, so it adds no log events and no lock-order edges. */
+static pthread_barrier_t start_barrier;
+static int use_barrier;
+static void wait_for_start(void) { if (use_barrier) pthread_barrier_wait(&start_barrier); }
+
 static void pause_between_waits(void) { if (slow_mode) usleep(100 * 1000); }
 
 static void *p0(void *arg) {
     (void)arg;
+    wait_for_start();
     for (int i = 0; i < iters; i++) {
         sem_wait(&S);
         pause_between_waits();
@@ -36,6 +46,7 @@ static void *p0(void *arg) {
 
 static void *p1(void *arg) {
     (void)arg;
+    wait_for_start();
     for (int i = 0; i < iters; i++) {
         sem_wait(&Q);
         pause_between_waits();
@@ -50,9 +61,11 @@ int main(int argc, char **argv) {
     const char *mode = argc > 1 ? argv[1] : "seq";
     int concurrent = strcmp(mode, "race") == 0 || strcmp(mode, "slow") == 0;
     slow_mode = strcmp(mode, "slow") == 0;
+    use_barrier = concurrent;
     if (strcmp(mode, "race") == 0) iters = argc > 2 ? atoi(argv[2]) : 1000;
     sem_init(&S, 0, 1);
     sem_init(&Q, 0, 1);
+    if (concurrent) pthread_barrier_init(&start_barrier, NULL, 2);
     pthread_t a, b;
     pthread_create(&a, NULL, p0, NULL);
     if (!concurrent) pthread_join(a, NULL);

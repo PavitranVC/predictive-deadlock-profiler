@@ -1,16 +1,13 @@
 CC      ?= gcc
 CFLAGS  = -Wall -Wextra -O1 -g -fPIC
-TESTCF  = -Wall -Wextra -g -pthread -fPIE -pie   # PIE: site offsets assume it (see pdp.h)
+TESTCF  = -Wall -Wextra -g -pthread -fPIE -pie
+# PIE: site offsets assume it (see pdp.h). No -O so call-site line numbers stay exact.
 
 all: build/libpdp.so build/pdp-analyze build/pdp tests/bin/basic tests/bin/overflow tests/bin/bank tests/bin/sem_sq tests/bin/gate tests/bin/philo_naive tests/bin/philo_ordered
 
 build/libpdp.so: src/libpdp.c src/pdp.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) -shared -o $@ src/libpdp.c -ldl -pthread
-
-tests/bin/basic: tests/basic.c
-	@mkdir -p tests/bin
-	$(CC) $(TESTCF) -o $@ tests/basic.c
 
 build/pdp-analyze: src/analyze.c src/report.c src/analyze.h
 	@mkdir -p build
@@ -19,14 +16,6 @@ build/pdp-analyze: src/analyze.c src/report.c src/analyze.h
 build/pdp: src/pdp
 	@mkdir -p build
 	cp src/pdp $@ && chmod +x $@
-
-tests/bin/bank: tests/bank.c
-	@mkdir -p tests/bin
-	$(CC) $(TESTCF) -o $@ tests/bank.c
-
-tests/bin/overflow: tests/overflow.c
-	@mkdir -p tests/bin
-	$(CC) $(TESTCF) -o $@ tests/overflow.c
 
 tests/bin/%: tests/%.c
 	@mkdir -p tests/bin
