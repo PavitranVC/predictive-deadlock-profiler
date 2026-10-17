@@ -1,0 +1,112 @@
+// PDP architecture v4 (Stage 4). Solid = built (no planned nodes remain).
+// Copy of arch-v3.dot with the confirmer loop added: analyzer --sites -> pdp confirm -> program run with
+// PDP_DELAY_SITE + PDP_WATCHDOG=1 -> verdict. arch-v3.dot is unchanged.
+digraph pdp_v4 {
+    rankdir=TB;
+    graph [fontname="Helvetica", fontsize=12, labelloc=t, pad=0.3, nodesep=0.5, ranksep=0.6];
+    node  [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#e8f0fe", color="#1a56a8"];
+    edge  [fontname="Helvetica", fontsize=10, color="#333333"];
+
+    label="PDP v4 - interceptor (S1) + analyzer (S2) + ground-truth tests (S3) + confirmer (S4)";
+
+    prog [label="Unmodified C program\n(calls pthread_mutex_* / sem_*)", fillcolor="#ffffff"];
+
+    subgraph cluster_tests {
+        label="tests/ ground-truth programs (Stage 3)";
+        style="rounded,dashed"; color="#1e7b3a"; fontcolor="#1e7b3a";
+
+        bank    [label="bank.c\nreal 2-cycle (locks)", fillcolor="#ffffff", color="#1e7b3a"];
+        semsq   [label="sem_sq.c\nreal 2-cycle (semaphores S, Q)", fillcolor="#ffffff", color="#1e7b3a"];
+        gate    [label="gate.c\nfiltered (gate_G), never hangs", fillcolor="#ffffff", color="#1e7b3a"];
+        naive   [label="philo_naive.c\nreal 5-cycle", fillcolor="#ffffff", color="#1e7b3a"];
+        ordered [label="philo_ordered.c\nno cycle, never hangs", fillcolor="#ffffff", color="#1e7b3a"];
+        modes   [label="modes: seq (predict) | race N (natural)\n| slow (forced hang)\nstart barrier in race and slow", shape=note, fillcolor="#e6f4ea", color="#1e7b3a"];
+        check   [label="check_suite.sh (make test)\nstrict asserts: one cycle, 5 distinct locks,\nclean programs never hang", fillcolor="#e6f4ea", color="#1e7b3a"];
+    }
+
+    subgraph cluster_pdp {
+        label="libpdp.so (LD_PRELOAD)";
+        style="rounded,dashed"; color="#1a56a8"; fontcolor="#1a56a8";
+
+        hooks [label="Hooks\npthread_mutex_lock / unlock / trylock / destroy\nsem_wait / sem_post\n(pthread_barrier_wait: not hooked)"];
+        table [label="Thread table\npdp_threads[64] (struct tcb)\nheld[16], waiting_on\nTLS: me, in_hook", fillcolor="#fff4d6", color="#b07d00"];
+        lock  [label="tbl_lock\ntest-and-set spin lock", shape=octagon, fillcolor="#fff4d6", color="#b07d00"];
+    }
+
+    glibc [label="Real glibc (libc.so.6)\npthread_mutex_* / sem_*\nfound by dlsym(RTLD_NEXT)", fillcolor="#e6f4ea", color="#1e7b3a"];
+    log   [label="pdp.log\n(O_APPEND, one write() per line)", shape=cylinder, fillcolor="#e6f4ea", color="#1e7b3a"];
+    pdprun [label="pdp run [-o log] ./prog args\n(front end: sets LD_PRELOAD)", fillcolor="#e8f0fe", color="#1a56a8"];
+
+    prog -> hooks [label="calls (LD_PRELOAD\nresolves to hook)"];
+    hooks -> glibc [label="real call after REQ\n(dlsym RTLD_NEXT)"];
+    hooks -> table [label="update held /\nwaiting_on"];
+    table -> lock [label="under lock only", style=dotted, arrowhead=none];
+    hooks -> log [label="REQ / ACQ / REL /\nFAIL / TRY_* / POST"];
+
+    // Stage 3: the test programs are run through the front end, under LD_PRELOAD.
+    modes -> bank [style=invis];
+    bank -> pdprun [label="seq / race / slow"];
+    semsq -> pdprun;
+    gate -> pdprun;
+    naive -> pdprun;
+    ordered -> pdprun;
+    pdprun -> prog [label="runs"];
+    pdprun -> log [label="writes"];
+    check -> pdprun [label="seq run, then analyze"];
+
+    subgraph cluster_analyzer {
+        label="pdp-analyze (Stage 2): src/analyze.c, src/report.c";
+        style="rounded,dashed"; color="#1a56a8"; fontcolor="#1a56a8";
+
+        parser  [label="Parser\nread_log, parse_event, parse_held\nskip # lines, held=? counted\nsort by seq"];
+        lockgraph [label="Lock-order graph\nnode = address + generation (DESTROY)\nedge A->B from REQ: tid, site, held set, count\ntrylock and recursive re-lock add no edge", fillcolor="#fff4d6", color="#b07d00"];
+        cycles  [label="Cycle enumeration\nper start node, elementary cycles\nlength <= 8, 256 cycles, 200k steps\n(capped -> warning)"];
+        filters [label="Filters (GoodLock)\npairwise distinct threads\npairwise disjoint held sets\nverdict: REAL / UNDECIDED / FILTERED", fillcolor="#fff4d6", color="#b07d00"];
+        report  [label="Report\ncoloured text, exit 0 / 2 / 1\nnames: lk= + nm, else L1, L2\nsites: addr2line"];
+        fix     [label="F(R) fix\ndrop least frequent edge per real cycle\nKahn topological sort -> lock order\nall call sites listed"];
+        dot     [label="Graphviz .dot\n(pdp analyze renders .png)"];
+
+        parser -> lockgraph [label="events"];
+        lockgraph -> cycles [label="adjacency"];
+        cycles -> filters [label="cycles"];
+        filters -> report [label="verdicts"];
+        report -> fix [label="REAL cycles"];
+        report -> dot [label="--dot"];
+    }
+
+    subgraph cluster_experiments {
+        label="Experiment harness (scripts/, Stage 5 scripts merged early)";
+        style="rounded,dashed"; color="#1a56a8"; fontcolor="#1a56a8";
+
+        experiment [label="run_experiment.sh\nnative race runs: scheduler x cores x load\nhang = timeout (exit 124)\nresults/manifest.csv", fillcolor="#e8f0fe", color="#1a56a8"];
+        overhead   [label="overhead.sh\nclean binaries, with vs without LD_PRELOAD", fillcolor="#e8f0fe", color="#1a56a8"];
+    }
+
+    experiment -> bank [label="runs race N\n(no LD_PRELOAD)"];
+    experiment -> naive [label="runs race N"];
+    overhead -> ordered [label="baseline vs PDP"];
+    overhead -> pdprun [label="LD_PRELOAD=libpdp.so"];
+
+    // Stage 4: confirmer loop. Predict (analyzer), confirm (pdp confirm), verdict.
+    subgraph cluster_confirmer {
+        label="Confirmer (Stage 4): pdp confirm (src/pdp)";
+        style="rounded,dashed"; color="#1a56a8"; fontcolor="#1a56a8";
+
+        sites    [label="analyzer --sites\nREQ call sites of each REAL cycle", fillcolor="#fff4d6", color="#b07d00"];
+        confirm  [label="pdp confirm -n N -t T\nN runs under timeout -k 1, stdin </dev/null\ndeadlocked = exit 42 AND own DEADLOCK line", fillcolor="#fff4d6", color="#b07d00"];
+        delayrun [label="program run with\nPDP_DELAY_SITE=<sites>, PDP_WATCHDOG=1\n(--baseline: no delay)"];
+        watchdog [label="watchdog thread (lazy start)\nevery 50 ms: snapshot, wait-for graph,\n3 equal scans -> _exit(42)", fillcolor="#fff4d6", color="#b07d00"];
+        verdict  [label="verdict\nCONFIRMED if >= 1 deadlocked run\nexit 0 / 2 / 1", shape=note, fillcolor="#e6f4ea", color="#1e7b3a"];
+
+        sites -> confirm [label="sites"];
+        confirm -> delayrun [label="runs N times"];
+        delayrun -> hooks [label="delay before 2nd lock\n(maybe_delay)"];
+        hooks -> watchdog [label="first hooked call starts it"];
+        watchdog -> log [label="# pdp DEADLOCK line"];
+        watchdog -> confirm [label="exit 42", style=dashed];
+        confirm -> verdict;
+    }
+
+    report -> sites [label="--sites"];
+    log -> parser [label="reads"];
+}

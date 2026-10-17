@@ -13,7 +13,7 @@ for p in bank sem_sq philo_naive; do
 done
 
 # Nothing to confirm when no cycle is predicted (or it is gated).
-for p in gate philo_ordered; do
+for p in gate philo_ordered bank_fixed; do
     log=tests/bin/$p.confirm.log
     timeout 10 ./build/pdp run -o "$log" "./tests/bin/$p" seq >/dev/null || fail "$p: seq run failed"
     out=$(./build/pdp confirm --log "$log" "./tests/bin/$p" race 1); rc=$?
@@ -29,6 +29,18 @@ PDP_WATCHDOG=1 PDP_LOG=$log LD_PRELOAD=./build/libpdp.so timeout 10 tests/bin/ba
 [ $(( $(date +%s) - start )) -le 3 ] || fail "watchdog: took more than 3 s"
 grep -q '^# pdp DEADLOCK tids=[0-9,]* locks=0x' "$log" || fail "watchdog: no DEADLOCK line in log"
 
-# Without PDP loaded nothing changes.
-timeout 5 tests/bin/bank seq >/dev/null 2>&1; [ $? -eq 0 ] || fail "bank seq without PDP should exit 0"
+# Negative tests: correct programs must NEVER be killed by the watchdog (exit 42).
+# No delay injection here; the watchdog is the only thing under test.
+neg() {
+    local desc=$1; shift
+    PDP_WATCHDOG=1 PDP_LOG=/dev/null LD_PRELOAD=./build/libpdp.so timeout 20 "$@" >/dev/null 2>&1
+    local rc=$?
+    [ "$rc" -eq 0 ] || fail "watchdog false alarm or hang on $desc: exit $rc, want 0"
+}
+neg "gate race"          tests/bin/gate race 200
+neg "philo_ordered race" tests/bin/philo_ordered race 200
+neg "bank_fixed race"    tests/bin/bank_fixed race 200
+neg "prodcons race"      tests/bin/prodcons race 200
+neg "prodcons slow"      tests/bin/prodcons slow
+neg "recursive race"     tests/bin/recursive race 300000
 echo PASS

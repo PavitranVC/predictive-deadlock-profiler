@@ -248,6 +248,21 @@ static void maybe_delay(struct tcb *t, void *ret) {
 
 static volatile int watchdog_started;
 
+/* Slot of the thread that holds `lock`, or -1. A slot never counts as its own
+ * owner (`self`). WHY: a thread waiting on a lock it already lists as held is
+ * not blocked by another thread. A recursive mutex relock succeeds at once, and
+ * a semaphore "held" by the waiter is a signalling pattern (consumer waits on
+ * `full`, the producer posts it), not ownership. Without this rule both would
+ * look like a 1-thread deadlock. */
+static int owner_of(const struct tcb *snap, int self, void *lock) {
+    for (int j = 0; j < MAX_THREADS; j++) {
+        if (j == self) continue;
+        for (int k = 0; k < snap[j].nheld; k++)
+            if (snap[j].held[k] == lock) return j;
+    }
+    return -1;
+}
+
 /* Follow "waits for lock -> owner thread -> waits for ..." from slot `start`.
  * Returns the slot where the chain closes a loop, or -1 if it ends. */
 static int chain_loop(const struct tcb *snap, int start) {
@@ -256,11 +271,7 @@ static int chain_loop(const struct tcb *snap, int start) {
     while (cur >= 0 && snap[cur].tid && snap[cur].waiting_on) {
         if (seen[cur]) return cur;
         seen[cur] = 1;
-        int owner = -1;
-        for (int j = 0; j < MAX_THREADS && owner < 0; j++)
-            for (int k = 0; k < snap[j].nheld; k++)
-                if (snap[j].held[k] == snap[cur].waiting_on) { owner = j; break; }
-        cur = owner;
+        cur = owner_of(snap, cur, snap[cur].waiting_on);
     }
     return -1;
 }
@@ -273,10 +284,7 @@ static void report_and_die(const struct tcb *snap, int at) {
     size_t a = 0, b = 0;
     int cur = at;
     do {
-        int owner = -1;
-        for (int j = 0; j < MAX_THREADS && owner < 0; j++)
-            for (int k = 0; k < snap[j].nheld; k++)
-                if (snap[j].held[k] == snap[cur].waiting_on) { owner = j; break; }
+        int owner = owner_of(snap, cur, snap[cur].waiting_on);
         if (a < sizeof tids - 24) a += snprintf(tids + a, sizeof tids - a, "%s%d", a ? "," : "", (int)snap[cur].tid);
         if (b < sizeof locks - 24) b += snprintf(locks + b, sizeof locks - b, "%s%p", b ? "," : "", snap[cur].waiting_on);
         cur = owner;
@@ -289,18 +297,41 @@ static void report_and_die(const struct tcb *snap, int at) {
     _exit(PDP_EXIT_DEADLOCK);
 }
 
+/* The tids on the loop through slot `at`, sorted, so the same loop found from a
+ * different starting slot gives the same list. Returns how many. */
+static int loop_tids(const struct tcb *snap, int at, int *out) {
+    int n = 0, cur = at;
+    do {
+        int t = (int)snap[cur].tid, i = n++;
+        while (i > 0 && out[i - 1] > t) { out[i] = out[i - 1]; i--; }   /* insertion sort */
+        out[i] = t;
+        cur = owner_of(snap, cur, snap[cur].waiting_on);
+    } while (cur != at && cur >= 0 && n < MAX_THREADS);
+    return n;
+}
+
+/* WHY 3 scans in a row (~150 ms): a real deadlock is permanent, so the same
+ * threads stay in the same loop. A transient state (a thread has just got its
+ * lock but has not cleared waiting_on yet) disappears by the next scan. */
+#define WATCHDOG_SCANS 3
+
 static void *watchdog_main(void *arg) {
     (void)arg;
     struct tcb snap[MAX_THREADS];
+    int prev[MAX_THREADS], prev_n = 0, streak = 0;
     for (;;) {
-        usleep(50000);
+        usleep(50000);      /* short enough to report well inside a 1 s test, cheap for a 64-slot scan */
         tbl_acquire();                          /* hold the spin lock only for the copy */
         memcpy(snap, pdp_threads, sizeof snap);
         tbl_release();
-        for (int i = 0; i < MAX_THREADS; i++) {
-            int at = chain_loop(snap, i);
-            if (at >= 0) report_and_die(snap, at);
-        }
+        int cur_tids[MAX_THREADS], n = 0, at = -1;
+        for (int i = 0; i < MAX_THREADS && at < 0; i++) at = chain_loop(snap, i);
+        if (at >= 0) n = loop_tids(snap, at, cur_tids);
+        if (n > 0 && n == prev_n && memcmp(cur_tids, prev, n * sizeof(int)) == 0) streak++;
+        else streak = n > 0 ? 1 : 0;
+        if (n > 0) memcpy(prev, cur_tids, n * sizeof(int));
+        prev_n = n;
+        if (streak >= WATCHDOG_SCANS) report_and_die(snap, at);
     }
     return NULL;
 }

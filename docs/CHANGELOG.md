@@ -62,3 +62,26 @@ All notable changes to PDP, one entry per stage. Newest stage last.
   `plot.py`) were written early by the experimenter in a separate session (branch
   `ccr-b8583290-l43ezk-experiments`, commit `e969aba`) and merged into the main branch (merge `7e357a9`). They are
   not part of Stage 3 and are not described here beyond this note.
+
+## Stage 4 — confirmer (2026-10-17, commits `73b455e`, `d2b9e15`, `c8712fb`)
+
+- Directed delay injection: `PDP_DELAY_SITE` (comma-separated `module+0xoff` sites) and `PDP_DELAY_US` (default
+  100000). A thread that already holds a lock sleeps before requesting a lock from a listed site. Sites come from
+  `pdp analyze --sites`.
+- Watchdog thread (`PDP_WATCHDOG=1`, started lazily on the first hooked call). Every 50 ms it snapshots the thread
+  table, builds the wait-for graph (thread to owner of the lock it waits on), and reports a cycle only after the same
+  thread set is seen in 3 consecutive scans. Self-edges (recursive relock, semaphore signalling) are ignored. It writes
+  `# pdp DEADLOCK tids=.. locks=..` and calls `_exit(42)`.
+- `pdp confirm [-n N] [-t T] [--log f] [--baseline] ./prog args...`: runs the program N times, counts a deadlock only
+  if exit 42 and the run's own log has the DEADLOCK line, and prints CONFIRMED if at least one run deadlocked.
+  Errors (status 125-127, bad `-n`/`-t`, missing program) exit 1.
+- Measured: bank 10/10 deadlocked with the delay, 0/10 at baseline.
+- New test programs `tests/prodcons.c` and `tests/recursive.c` as negatives (must exit 0 under `PDP_WATCHDOG=1`), and
+  `tests/check_confirm.sh` (true positives for bank, sem_sq, philo_naive; negatives for gate, philo_ordered, prodcons,
+  recursive).
+- Review (`docs/reviews/stage-4.md`): 4 MUST-FIX fixed (self-cycle false positives on semaphores and recursive
+  mutexes, negative tests, exit 42 alone trusted). Several SHOULD-FIX and NIT items remain open (signal deaths counted
+  as completed, no `exe=` check, no `pthread_create` WARN, string-based site matching); listed in
+  `docs/stages/stage-4.md`.
+- Known limits: semaphores have no true owner (`src/pdp.h`); a real one-thread relock deadlock is missed; cond_wait and
+  timedlock are invisible to the watchdog; a forked child has no watchdog.
