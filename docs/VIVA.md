@@ -1,4 +1,4 @@
-# VIVA prep — PDP (through Stage 3)
+# VIVA prep — PDP (through Stage 4)
 
 Plain-English glossary and likely examiner questions. Each entry is written so you can say it out loud.
 
@@ -71,6 +71,38 @@ Plain-English glossary and likely examiner questions. Each entry is written so y
 - **Timeout, exit 124**: the `timeout` command kills a program that runs longer than its limit, and it exits with code 124. Our suite and the experiment use 124 to mean "hung".
 - **Flaky test**: a test that passes and fails on different runs of the same code, with no change to the code. Usually it depends on timing or load. Our race checks accept both outcomes for the real-cycle programs, so they cannot flake, and the slow checks are made certain by the barrier and the 100 ms sleep.
 - **Mode (`seq`, `race N`, `slow`)**: the three ways each test program runs. `seq` runs threads one after another, `race` runs them concurrently with no delay, and `slow` runs them concurrently with a sleep between the two locks.
+
+### Stage 4 terms (confirmer)
+
+- **Confirmation vs prediction**: prediction (Stage 2) says a deadlock *could* happen, from a run that did not hang. Confirmation (Stage 4) makes the program try to hang and checks the live state. Only confirmation shows a hang happened.
+- **Wait-for graph**: a graph with one node per *thread* and an arrow T1→T2 when T1 is blocked on a lock that T2 holds. A cycle means those threads are stuck right now. It is the textbook "wait-for" form of the resource-allocation graph (Holt), with the lock nodes folded into the arrows.
+- **Lock-order graph vs wait-for graph**: the lock-order graph (Stages 1–2) has one node per *lock* and an arrow A→B for "someone took B while holding A", built from the whole log. A cycle in it is a *possible* deadlock. The wait-for graph has one node per *thread* and is built from a snapshot of *now*. A cycle in it is an *actual* deadlock.
+- **Snapshot**: a copy of the thread table taken while holding the table's spin lock, so the watchdog reads one consistent state instead of a mix of two moments.
+- **Owner (of a lock)**: the thread whose `held` list contains the lock. A mutex has one owner. A semaphore has no true owner (any thread may post it), so we use the last waiter.
+- **Self-edge**: an arrow from a thread to itself, i.e. it waits for a lock it already holds. A NORMAL mutex relock really deadlocks, but a recursive relock does not, so the watchdog ignores self-edges.
+- **Watchdog**: a separate thread, started by PDP, that checks the program every 50 ms, reports a deadlock, and ends the process. It only reads state and uses `write` and `_exit`, never a hooked lock call.
+- **Lazy start**: the watchdog thread is created by the first lock call, not at load time, under an atomic exchange so only one thread creates it.
+- **Persistence check (3-scan rule)**: a cycle is reported only when the same thread set forms it in 3 scans in a row (about 150 ms). A single snapshot can catch a thread halfway through a lock call, so one scan can show a false loop.
+- **False positive (in detection)**: the detector reports a deadlock that does not happen. Stage 4 had three: a producer/consumer semaphore looked like a thread waiting for itself, a recursive mutex relock looked the same, and a program that exits 42 on its own looked like a watchdog kill. Each has a fix (self-edges ignored, the DEADLOCK line required).
+- **False negative (in detection)**: the detector misses a deadlock that does happen. Ignoring self-edges causes one for a real NORMAL-mutex self-relock. `cond_wait` and `timedlock` are invisible to the watchdog for the same reason.
+- **Directed delay injection**: making a predicted deadlock more likely by sleeping only at the call sites named by the predicted cycle. "Directed" because the delay is aimed at specific code, not at every lock. Idea from DeadlockFuzzer (Joshi et al., PLDI 2009).
+- **Call site**: the place in the code where a lock request is made, written as `module+0xoff`. `addr2line` turns it into a file and line. `pdp analyze --sites` prints the call sites of each cycle's edges.
+- **`PDP_DELAY_SITE` / `PDP_DELAY_US`**: environment variables that give the sites to delay at and the delay length (default 100 ms).
+- **Baseline**: the same N runs with no delay. It is the control: if the delay is the only change, a 10/10 vs 0/10 difference shows the delay causes the deadlock.
+- **Recovery by termination**: once a deadlock is found, end the process so the run finishes. A deadlocked process cannot free its threads by itself, so this is the only recovery PDP does. Exit 42 is the mark.
+- **Deadlock detection**: find a deadlock that exists now (the watchdog) or could exist (the analyzer).
+- **Deadlock prevention**: design the program so one Coffman condition cannot hold. Lock ordering removes circular wait (`philo_ordered.c`). The F(R) fix suggestion in Stage 2 is advice for this.
+- **Deadlock avoidance**: decide at each lock request whether granting it keeps the system in a safe state (Banker's algorithm). It needs future requests to be known, and PDP has no such decision point.
+- **Deadlock recovery**: break a deadlock that exists, by terminating, rolling back, or taking a resource away. Stage 4 does the first.
+- **`exit` vs `_exit`**: `exit` runs `atexit` handlers and destructors and flushes stdio buffers, so it can call the very locks that are deadlocked. `_exit` ends the process at once, with no user code and no hooks.
+- **`timeout`, `timeout -k 1`**: `timeout` runs a program with a time limit and returns 124 if it had to kill it. `-k 1` sends a second, forceful signal one second later if the program is still alive.
+- **SIGTERM vs SIGKILL**: SIGTERM asks a program to stop, and the program can catch or ignore it. SIGKILL cannot be caught or ignored; the kernel ends the process. Only `timeout` sends SIGTERM by default, which is why `-k` is needed.
+- **Exit status 128+n**: when a process dies from signal n, the shell reports status 128+n. Our confirmer does not yet treat these as errors (see the open items in `docs/stages/stage-4.md`).
+- **`mktemp` and `trap ... EXIT`**: `mktemp -d` makes a fresh temporary directory, and `trap` runs a command when the shell exits. Each confirm run writes its log there, and the directory is deleted at the end.
+- **`</dev/null`**: gives a command an empty stdin. Without it, a target program reads the rest of our input and we lose lines.
+- **Producer/consumer**: one thread makes items and posts a semaphore, another waits on it and takes them. The semaphore carries a signal, not a lock, so it has no owner. `tests/prodcons.c`.
+- **Recursive mutex**: a mutex the owner may lock again. Each lock adds to a count, and each unlock removes one. `PTHREAD_MUTEX_RECURSIVE` in `tests/recursive.c`.
+- **ERRORCHECK mutex**: a mutex that returns `EDEADLK` when its owner relocks it, instead of blocking. This is how a program can tell a self-deadlock from a recursive relock.
 
 ## Likely examiner questions
 
@@ -175,3 +207,33 @@ A binary semaphore is a counter that starts at 1, so `sem_wait` (P) takes it to 
 
 **34. What does exit code 124 mean, and why does the suite use it?**
 124 is what the `timeout` command returns when it kills the program because the time limit ran out. A run that returns 124 has not finished, so we count it as a hang. The suite uses `timeout 2` for the forced `slow` hangs, which must exit 124, and it accepts 124 for race runs of the real programs, but never for the clean ones.
+
+**35. How is the wait-for graph different from your lock-order graph?**
+They answer different questions. The lock-order graph (Stages 1–2) has one node per lock and an arrow A→B for "some thread took B while holding A". It is built from the whole log, so a cycle in it is a *possible* deadlock: the orders could interleave into one. The wait-for graph has one node per thread and an arrow T1→T2 for "T1 is blocked on a lock T2 holds". It is built from one snapshot of the live program, so a cycle in it is an *actual* deadlock right now. The watchdog uses the second one. Each thread waits on at most one lock, so each node has at most one outgoing arrow, and following the arrows either ends or loops.
+
+**36. Why does injecting a delay not create a deadlock that could never happen?**
+The delay only changes timing. It does not change which locks a thread takes or in what order. The two threads still have to request the two locks in the orders the cycle names, so the deadlock is one the program already allows. A gate lock is still held by both threads of a gated cycle, so with any delay they stay serialised and the watchdog never sees a cycle. The watchdog reports only loops that exist in the live state at the time of the snapshot, so the delay cannot invent one. What it can do is make a rare interleaving common, which is what we measured: bank deadlocked 10/10 with the delay and 0/10 without.
+
+**37. Why `_exit` and not `exit`?**
+`exit` runs the `atexit` handlers and the destructors, and flushes stdio. Any of these may call a hooked lock, and the lock may be one of the deadlocked ones, so the watchdog would hang inside its own exit. `_exit` ends the process at once with a system call. Our log is safe anyway, because every line is one `write` to an `O_APPEND` file, so nothing we wrote is still in a buffer.
+
+**38. Which of detection, prevention, avoidance and recovery does each PDP stage do?**
+- Stage 1 (interceptor) and Stage 2 (analyzer): **detection, but predictive**. They find a cycle in the lock-order graph from a run that did not hang. The Stage 2 F(R) suggestion is **prevention** advice: it proposes a lock order that removes the cycle, but nothing applies it.
+- Stage 3 (test programs): **neither**. They are ground truth for checking detection. `philo_ordered.c` shows prevention by resource ordering.
+- Stage 4 (confirmer): **runtime detection** (the watchdog finds a live wait-for cycle) and **recovery by termination** (`_exit(42)` ends the stuck process so the run is counted).
+- **Avoidance**: none. PDP never decides whether to grant a lock request. The delay hook slows a request down, it does not refuse one.
+
+**39. Why does the watchdog need 3 scans in a row?**
+A snapshot can catch a thread in the middle of a lock call. For example, a thread that has just been granted a lock but has not yet cleared `waiting_on` points at a lock nobody lists as held, so its chain ends. A cycle that really exists stays the same across scans, while a transient one does not. Requiring the same thread set in 3 consecutive scans (about 150 ms) removes those transient cases.
+
+**40. Why ignore self-edges, and what does that cost?**
+A self-edge means a thread waits for a lock it already holds. Two correct programs do this: a recursive mutex relocked by its owner, and a semaphore signal where the consumer's next `sem_wait` finds the same thread as the last owner. Before the fix, both were reported as deadlocks (the recursive test failed 10 of 10 runs). The cost is a false negative: a NORMAL mutex relocked by its owner really deadlocks, and the watchdog cannot tell that from the correct cases, so it misses it. We chose the safe side, because a false alarm stops a correct program.
+
+**41. Why is exit code 42 not enough to count a deadlock?**
+A program can exit with 42 on its own, and then the confirmer would call a healthy run deadlocked. The review reproduced this: a program that exits 42 gave CONFIRMED. So a run counts only if it exits 42 **and** its own log contains the `# pdp DEADLOCK` line. The log line is the evidence, and the exit code only says the watchdog ended the process.
+
+**42. What does the baseline prove, and what does CONFIRMED prove?**
+The baseline runs the same N times with no delay. For bank it gave 0/10, while the delay gave 10/10, so the delay is what causes the hang, not the scheduler alone. CONFIRMED means at least one run in our environment reached a real wait-for cycle. It does not prove the program always deadlocks, and 0 of N does not prove it never does. The verdict is evidence of one reachable deadlock, which is all the claim needs.
+
+**43. Why is the watchdog thread started lazily, on the first lock call?**
+A program that never locks gets no extra thread. Creating a thread inside the first hooked call is safe because the call is made with the hook flag set and without the table lock, so `pthread_create` cannot call back into our hooks. The review checked this. The same check (only one thread wins the atomic exchange) stops two threads from creating two watchdogs.
