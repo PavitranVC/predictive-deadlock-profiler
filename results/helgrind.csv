@@ -1,0 +1,6 @@
+binary,exit_code,timed_out,lock_order_reported,lock_order_violations,error_summary
+bank,0,no,yes,1,1
+sem_sq,0,no,no,0,0
+philo_naive,0,no,yes,1,1
+gate,0,no,yes,1,1
+philo_ordered,0,no,no,0,0
