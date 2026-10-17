@@ -1,4 +1,4 @@
-# VIVA prep — PDP (through Stage 2)
+# VIVA prep — PDP (through Stage 3)
 
 Plain-English glossary and likely examiner questions. Each entry is written so you can say it out loud.
 
@@ -58,6 +58,19 @@ Plain-English glossary and likely examiner questions. Each entry is written so y
 - **`lk=`**: a field libpdp writes on each event: the address of the lock object as `module+0xoff`. It lets the analyzer name the lock.
 - **Fixed-size table**: an array with a set maximum (`MAX_NODES`, `MAX_EDGES`). We use them so memory is bounded; overflow is counted and reported.
 - **`popen`**: runs a shell command and reads its output. We use it for `addr2line` and `nm`, after checking the arguments so no shell metacharacter can get through.
+
+- **Ground truth**: the answer we already know before running a detector. For the test programs we know by construction whether each can deadlock, so we can check the detector's answers against it.
+- **Dining philosophers**: a classic deadlock example. Five philosophers sit around a table with one fork between each pair. Each needs the fork on his left and the fork on his right. If all pick up the left fork at once, each waits forever for the right one.
+- **Resource ordering**: a fix for deadlock. Every lock gets a number, and every thread takes its locks in increasing order. Then no cycle of waits can form. `philo_ordered.c` does this with forks.
+- **Circular wait**: the Coffman condition where threads form a loop, each waiting for a lock the next one holds. Resource ordering removes it, because a loop would need some lock to be taken in decreasing order.
+- **Hold-and-wait**: the Coffman condition where a thread keeps the lock it has while it waits for another. Resource ordering does not remove it; the philosophers still hold one fork while they wait for the second.
+- **Binary semaphore**: a semaphore whose counter starts at 1, so it works like a lock: one thread can hold it at a time. `sem_sq.c` uses two of them, S and Q.
+- **P and V**: Dijkstra's names for the two semaphore operations. P (from Dutch "proberen", try) is `sem_wait`: it waits until the counter is above zero, then decrements it. V (from "verhogen", increase) is `sem_post`: it increments the counter and wakes a waiter.
+- **Barrier (`pthread_barrier_t`)**: a meeting point. Each thread that calls `pthread_barrier_wait` stops until the given number of threads have all arrived; then all continue together. We use one at the start of race and slow modes so all threads begin at the same moment.
+- **Thread stagger**: the small time gap between when one thread is created and when the next starts running. Without a barrier, the threads of a test run start one after another, so a short run can finish before the next thread exists. The experiment would then measure thread creation, not lock interleaving.
+- **Timeout, exit 124**: the `timeout` command kills a program that runs longer than its limit, and it exits with code 124. Our suite and the experiment use 124 to mean "hung".
+- **Flaky test**: a test that passes and fails on different runs of the same code, with no change to the code. Usually it depends on timing or load. Our race checks accept both outcomes for the real-cycle programs, so they cannot flake, and the slow checks are made certain by the barrier and the 100 ms sleep.
+- **Mode (`seq`, `race N`, `slow`)**: the three ways each test program runs. `seq` runs threads one after another, `race` runs them concurrently with no delay, and `slow` runs them concurrently with a sleep between the two locks.
 
 ## Likely examiner questions
 
@@ -138,3 +151,27 @@ The filters need them. Whether two threads can be stuck together depends on what
 
 **26. What does the bank demo show, and why does the sequential run not hang?**
 `tests/bank.c` has two tellers who lock the two accounts in opposite orders. Run one after the other (we join between them), they can never block each other, so the program always finishes. The analyzer still sees that teller 1 went A then B and teller 2 went B then A, and reports the cycle `acct_a -> acct_b -> acct_a` with exit 2. Run with `slow`, the two tellers overlap and do hang. This is the point of the tool: predict the hang from a run that did not hang.
+
+**27. Why does ordered philosophers never deadlock — which Coffman condition does it break?**
+Every philosopher takes the lower-numbered fork first. So a thread that is waiting always waits for a higher-numbered fork than the one it holds. A loop of waits would need the numbers to go up all the way round and come back down to the start, which is impossible. That breaks **circular wait**, the fourth condition. It does not break the other three: forks are still mutually exclusive, a philosopher still holds one fork while waiting for the next (hold-and-wait), and a fork is still released only by its holder. The analyzer agrees: the graph is 0->1, 1->2, 2->3, 3->4, 0->4, with no cycle.
+
+**28. Why did you add a barrier?**
+Without it, the threads of a race run start one after another (thread stagger), so with a small N a thread can finish before the next one exists. Then `race` measures how fast `pthread_create` is. The numbers showed it: philo_naive never hung natively at N=1000 (0/20) but always hung under PDP (10/10), because the logging slowed each thread enough that they overlapped. With the barrier, all threads start contending together, so the hang rate depends on the interleaving and N, and the native and PDP runs can be compared fairly. The price is that the alignment is artificial and it raises the hang rate, which the write-up must say.
+
+**29. Does the barrier change what the analyzer sees?**
+No. PDP intercepts only the mutex and semaphore calls. `pthread_barrier_wait` is not in the hook list, so it writes no event and makes no edge. The threads hold no lock while they wait at the barrier, so no held set changes either. Checked: `pdp analyze` on `philo_ordered race 3` (with barrier) and `philo_ordered seq` (no barrier) both report the same graph, 5 locks and 5 edges, so the barrier adds nothing.
+
+**30. Why is gate.c FILTERED and not REAL, even though it takes the locks in opposite orders?**
+Both threads first take the global mutex `gate_G`. So the cycle `acct_a -> acct_b -> acct_a` is in the graph, but both edges' held sets contain `gate_G`. The GoodLock rule requires the held sets of the chosen edges to be pairwise disjoint, and they are not, so the cycle is FILTERED. The gate also means the program can never hang, which the suite checks in both `slow` and `race` mode.
+
+**31. Why does the sequential run predict a deadlock but never hang?**
+In `seq` mode the threads run one after another: each is created and joined before the next starts. So no thread ever waits for a lock another thread holds, and the program always exits 0. But every lock request is still logged, so the lock-order edges (A to B from one thread, B to A from the other) are in the log. The analyzer uses the order of requests, not the timing, so it sees the cycle. This is the basic claim of PDP.
+
+**32. How do you know the test suite is not flaky?**
+Each assertion is either certain or accepts all possible outcomes. The `slow` runs must hang (exit 124): the barrier makes all threads start together and the 100 ms sleep makes the circular wait certain. The `race` runs of the real programs accept both 0 and 124, so the scheduler cannot make them fail. The clean programs must exit 0 in every mode, which holds because their lock order (or their gate) makes a cycle impossible, not because of timing. The only timing-sensitive values are the `timeout` limits, which are long compared with the runs.
+
+**33. What is a binary semaphore, and why can sem_sq deadlock like the mutex program?**
+A binary semaphore is a counter that starts at 1, so `sem_wait` (P) takes it to 0 and blocks any other `sem_wait` until a `sem_post` (V) raises it again. Used as a lock it gives the same circular wait: P0 holds S and waits for Q, P1 holds Q and waits for S. The difference is that a semaphore has no owner, so any thread may post it. Our analyzer models it as a lock owned by the thread that waited. That is exact here, because each thread posts what it waited for. The Stage 2 limits say that a semaphore used as a signal would break this model.
+
+**34. What does exit code 124 mean, and why does the suite use it?**
+124 is what the `timeout` command returns when it kills the program because the time limit ran out. A run that returns 124 has not finished, so we count it as a hang. The suite uses `timeout 2` for the forced `slow` hangs, which must exit 124, and it accepts 124 for race runs of the real programs, but never for the clean ones.

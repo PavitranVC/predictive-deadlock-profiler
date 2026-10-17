@@ -40,3 +40,25 @@ All notable changes to PDP, one entry per stage. Newest stage last.
   shared_nodes, destroy_reuse, same_thread, three_cycle, unknown_held). Demo `tests/bank.c`.
 - Review fixes (`docs/reviews/stage-2.md`): MUST-FIX 1-4 fixed; SHOULD-FIX 5, 6, 7, 11 fixed; 8, 9 partly; 10 open.
   Details in `docs/stages/stage-2.md`.
+
+## Stage 3 — ground-truth test suite (2026-10-17, commit `09cda59`)
+
+- Five test programs in `tests/` with known ground truth: `bank.c` (real 2-cycle), `sem_sq.c` (real 2-cycle on
+  binary semaphores S, Q), `gate.c` (opposite order under gate lock `gate_G`, FILTERED), `philo_naive.c` (real
+  5-cycle), `philo_ordered.c` (lower fork first, no cycle).
+- Common interface: `seq` (default, predict from a run that never hangs), `race [N]` (natural concurrency),
+  `slow` (100 ms between locks, forced hang). Documented in `tests/README.md`.
+- Start barrier (`pthread_barrier_t`, count = thread count) in race and slow modes only. Added after review: without
+  it, race mode measured thread-creation stagger (philo_naive native 0/20 vs 10/10 under PDP). `pthread_barrier_wait`
+  is not intercepted, so it adds no edges. Native race-1000 hang rates after the barrier on 4 cores: bank 17/20,
+  sem_sq 15/20, philo_naive 12/20.
+- `tests/check_suite.sh` (run by `make test`): strict assertions. Exactly one cycle for real programs, 5 distinct
+  locks in the philosopher cycle, header counts (`N locks, M edges`), `timeout` on the seq run, clean programs must
+  exit 0 in `slow` and `race`, real programs must exit 124 in `slow`.
+- Named forks `fork0`..`fork4` so reports show exact names; `NPHIL` constant; `intptr_t` for thread arguments.
+- Review (`docs/reviews/stage-3.md`, commit `fd35b2b`): 3 MUST-FIX fixed; open items are mode validation, site
+  checks in the suite, `pthread_create` return checks, `sem_destroy` in sem_sq (listed in `docs/stages/stage-3.md`).
+- Parallel session: the Stage 5 experiment scripts (`scripts/run_experiment.sh`, `overhead.sh`, `helgrind.sh`,
+  `plot.py`) were written early by the experimenter in a separate session (branch
+  `ccr-b8583290-l43ezk-experiments`, commit `e969aba`) and merged into the main branch (merge `7e357a9`). They are
+  not part of Stage 3 and are not described here beyond this note.
