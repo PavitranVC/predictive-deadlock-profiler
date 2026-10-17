@@ -62,7 +62,7 @@ def plot_manifest(rows):
                 l, u = wilson(h, n)
                 p = h / n
                 xs.append(j + (i - 0.5) * w); ys.append(p)
-                lo.append(p - l); hi.append(u - p)
+                lo.append(max(0.0, p - l)); hi.append(max(0.0, u - p))  # clamp float rounding at p=0/1
                 print(f"{b:14}{k[0]:9}{k[1]:6}{load:8}{f'{h}/{n}':>9}{p:7.2f}   [{l:.3f}, {u:.3f}]")
             ax.bar(xs, ys, w, yerr=[lo, hi], capsize=3, label=load)
         ax.set_xticks(range(len(keys)))
