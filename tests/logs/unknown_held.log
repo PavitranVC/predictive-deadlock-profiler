@@ -1,0 +1,9 @@
+# pdp v1 pid=1 exe=/nonexistent/prog
+# thread 102's second REQ has held=? (thread table was full): no edge may be made from it
+0 101 REQ M 0xa0 /nonexistent/prog+0x10 held=-
+1 101 ACQ M 0xa0 /nonexistent/prog+0x10 held=-
+2 101 REQ M 0xb0 /nonexistent/prog+0x20 held=0xa0
+3 101 ACQ M 0xb0 /nonexistent/prog+0x20 held=0xa0
+4 102 REQ M 0xb0 /nonexistent/prog+0x40 held=-
+5 102 ACQ M 0xb0 /nonexistent/prog+0x40 held=-
+6 102 REQ M 0xa0 /nonexistent/prog+0x50 held=?

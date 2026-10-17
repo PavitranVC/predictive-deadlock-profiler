@@ -1,0 +1,12 @@
+# pdp v1 pid=1 exe=/nonexistent/prog
+# one thread takes A then B, later B then A: it can never wait for itself
+0 101 REQ M 0xa0 /nonexistent/prog+0x10 held=-
+1 101 ACQ M 0xa0 /nonexistent/prog+0x10 held=-
+2 101 REQ M 0xb0 /nonexistent/prog+0x20 held=0xa0
+3 101 ACQ M 0xb0 /nonexistent/prog+0x20 held=0xa0
+4 101 REL M 0xb0 /nonexistent/prog+0x28 held=0xa0
+5 101 REL M 0xa0 /nonexistent/prog+0x30 held=-
+6 101 REQ M 0xb0 /nonexistent/prog+0x40 held=-
+7 101 ACQ M 0xb0 /nonexistent/prog+0x40 held=-
+8 101 REQ M 0xa0 /nonexistent/prog+0x50 held=0xb0
+9 101 ACQ M 0xa0 /nonexistent/prog+0x50 held=0xb0

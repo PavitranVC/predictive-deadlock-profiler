@@ -13,6 +13,7 @@ grep ' REQ ' $LOG | grep -vq 'held=-' || fail "no REQ with non-empty held set"
 grep -q ' DESTROY ' $LOG || fail "no DESTROY"
 grep -q ' S 0x' $LOG || fail "no semaphore events"
 grep -q ' TRY_OK ' $LOG || fail "no TRY_OK"
+grep -q " lk=" $LOG || fail "no lk= field"
 grep -q 'WARN' $LOG && fail "unexpected WARN in basic run"
 
 # The first REQ with a non-empty held set is the lock of B; its site must be

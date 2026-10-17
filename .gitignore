@@ -11,3 +11,4 @@ report.dot
 report.png
 vgcore.*
 core
+!tests/logs/*.log

@@ -1,0 +1,37 @@
+#!/bin/bash
+# pdp - front end for the Predictive Deadlock Profiler.
+#   pdp run [-o log] ./prog args...   run prog with the interceptor, writing a log
+#   pdp analyze log [options]         analyze a log (options go to pdp-analyze)
+#   pdp confirm                       (Stage 4)
+# Installed next to libpdp.so and pdp-analyze in build/, so we find them via our own path.
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+usage() { echo "usage: pdp run [-o log] ./prog args... | pdp analyze log [--dot f.dot] [--no-color] | pdp confirm" >&2; exit 1; }
+
+cmd_run() {
+    local log=pdp.log
+    if [ "$1" = "-o" ]; then [ $# -ge 2 ] || usage; log=$2; shift 2; fi
+    [ $# -ge 1 ] || usage
+    # The program's own exit status is passed through; a hang is the user's Ctrl-C.
+    LD_PRELOAD="$here/libpdp.so" PDP_LOG="$log" "$@"
+}
+
+cmd_analyze() {
+    [ $# -ge 1 ] || usage
+    local dot="" prev=""
+    for a in "$@"; do [ "$prev" = "--dot" ] && dot=$a; prev=$a; done
+    "$here/pdp-analyze" "$@"
+    local rc=$?
+    # Render a picture only if Graphviz is installed; the .dot file is always written.
+    if [ -n "$dot" ] && [ $rc -ne 1 ] && command -v dot >/dev/null 2>&1; then
+        dot -Tpng "$dot" -o "${dot%.dot}.png"
+    fi
+    return $rc
+}
+
+case "$1" in
+    run)     shift; cmd_run "$@" ;;
+    analyze) shift; cmd_analyze "$@" ;;
+    confirm) echo "not implemented yet (Stage 4)" ;;
+    *)       usage ;;
+esac

@@ -104,19 +104,34 @@ static void held_drop(struct tcb *t, void *addr) {
     tbl_acquire(); held_remove(t, addr); tbl_release();
 }
 
+/* Name the module for dladdr results. glibc reports the main program by its
+ * argv[0] spelling (often relative); use the absolute path from /proc/self/exe
+ * so the analyzer can open it. */
+static const char *module_name(const Dl_info *info) {
+    return info->dli_fbase == exe_base ? exe_path : info->dli_fname;
+}
+
 /* Turn a return address into "module+0xoffset" so addr2line works under ASLR. */
 static void site_str(void *ret, char *out, size_t n) {
     Dl_info info;
     /* WHY ret-1: the return address is the instruction AFTER the call, which
      * can belong to the next source line. One byte back is inside the call. */
     char *call = (char *)ret - 1;
-    if (dladdr(call, &info) && info.dli_fname) {
-        /* glibc reports the main program by its argv[0] spelling (often relative);
-         * use the absolute path from /proc/self/exe so the analyzer can open it. */
-        const char *mod = info.dli_fbase == exe_base ? exe_path : info.dli_fname;
-        snprintf(out, n, "%s+0x%lx", mod, (unsigned long)(call - (char *)info.dli_fbase));
-    } else
+    if (dladdr(call, &info) && info.dli_fname)
+        snprintf(out, n, "%s+0x%lx", module_name(&info), (unsigned long)(call - (char *)info.dli_fbase));
+    else
         snprintf(out, n, "?+0x%lx", (unsigned long)call);
+}
+
+/* Where does the LOCK itself live? Globals sit inside a loaded module, so the
+ * analyzer can look the offset up with nm and print a variable name. Heap and
+ * stack locks are in no module: dladdr fails and we log "?". */
+static void lk_str(void *lock, char *out, size_t n) {
+    Dl_info info;
+    if (dladdr(lock, &info) && info.dli_fname)
+        snprintf(out, n, "%s+0x%lx", module_name(&info), (unsigned long)((char *)lock - (char *)info.dli_fbase));
+    else
+        snprintf(out, n, "?");
 }
 
 /* Build one log line on the stack and emit it with a single write() (O_APPEND
@@ -126,7 +141,7 @@ static void site_str(void *ret, char *out, size_t n) {
 static void log_event(struct tcb *t, const char *op, char kind, void *addr, void *ret, int err) {
     if (log_fd < 0) return;
     /* worst case: held = 16 * ("0x"+16 hex+",") = 19 bytes each -> 20 per entry */
-    char site[640], held[MAX_HELD * 20 + 2], buf[PDP_LINE_MAX];
+    char site[640], lk[640], held[MAX_HELD * 20 + 2], buf[PDP_LINE_MAX];
     void *snap[MAX_HELD]; int n = 0, lost = 1;  /* no slot -> unknown */
     pid_t tid = t ? t->tid : (pid_t)syscall(SYS_gettid);
     if (t) {                                    /* snapshot under the spin lock */
@@ -148,6 +163,9 @@ static void log_event(struct tcb *t, const char *op, char kind, void *addr, void
                        seq, (int)tid, op, kind, addr, site, held);
     if (err && len > 0 && len < (int)sizeof buf)
         len += snprintf(buf + len, sizeof buf - len, " err=%d", err);
+    lk_str(addr, lk, sizeof lk);
+    if (len > 0 && len < (int)sizeof buf)       /* lk= is always the LAST field */
+        len += snprintf(buf + len, sizeof buf - len, " lk=%s", lk);
     if (len < 0) return;
     if (len > (int)sizeof buf - 2) len = sizeof buf - 2;   /* truncated: keep room for \n */
     buf[len++] = '\n';

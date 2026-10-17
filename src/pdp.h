@@ -1,7 +1,7 @@
 /* pdp.h - constants and log format shared by libpdp.so and (later) the analyzer.
  *
  * LOG FORMAT (v1), one event per line, space separated:
- *   seq tid OP kind lockaddr site held=addr1,addr2|-
+ *   seq tid OP kind lockaddr site held=addr1,addr2|- [err=<code>] lk=module+0xoff|?
  * First line is a header:  # pdp v1 pid=<pid> exe=<path>
  *
  *   seq      global sequence number (total order of events, from an atomic counter)
@@ -21,6 +21,10 @@
  *            "-" = holds nothing (reliable), "?" = UNKNOWN (thread table full, or
  *            this thread held more than MAX_HELD locks). The analyzer must NOT
  *            create edges from a "?" line; treat it as missing data.
+ *   lk       always the last field: where the lock object itself lives, as
+ *            module+0xoffset (a global/static in the exe or a library) or "?" for
+ *            heap/stack locks. The analyzer feeds it to nm to name the variable.
+ *            Hand-written logs may omit it (treated as "?").
  *
  * Extra lines (start with '#', analyzer skips them but should report them):
  *   # pdp WARN overflow tid=<tid> what=threads|held    (once per thread and kind)

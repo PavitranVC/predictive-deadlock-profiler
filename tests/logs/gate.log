@@ -1,0 +1,14 @@
+# pdp v1 pid=1 exe=/nonexistent/prog
+# both threads hold gate lock G (0x10) around their A/B work, so they exclude each other
+0 101 REQ M 0x10 /nonexistent/prog+0x08 held=-
+1 101 ACQ M 0x10 /nonexistent/prog+0x08 held=-
+2 101 REQ M 0xa0 /nonexistent/prog+0x10 held=0x10
+3 101 ACQ M 0xa0 /nonexistent/prog+0x10 held=0x10
+4 101 REQ M 0xb0 /nonexistent/prog+0x20 held=0x10,0xa0
+5 101 ACQ M 0xb0 /nonexistent/prog+0x20 held=0x10,0xa0
+6 102 REQ M 0x10 /nonexistent/prog+0x38 held=-
+7 102 ACQ M 0x10 /nonexistent/prog+0x38 held=-
+8 102 REQ M 0xb0 /nonexistent/prog+0x40 held=0x10
+9 102 ACQ M 0xb0 /nonexistent/prog+0x40 held=0x10
+10 102 REQ M 0xa0 /nonexistent/prog+0x50 held=0x10,0xb0
+11 102 ACQ M 0xa0 /nonexistent/prog+0x50 held=0x10,0xb0
