@@ -88,7 +88,9 @@ timeout 30 build/pdp analyze "$TMP/gate.log"
 # ---- 7. chart -------------------------------------------------------------
 step 7 "Experiment results" "hang rate depends on scheduler, cores and load (95% Wilson CIs)."
 shopt -s nullglob
-pngs=(results/*.png)
+# Prefer the WSL2 run, fall back to the cloud run; empty array => message below.
+pngs=(results/wsl2/*.png)
+[ ${#pngs[@]} -eq 0 ] && pngs=(results/cloud/*.png)
 if [ ${#pngs[@]} -eq 0 ]; then
   echo "No charts: run scripts/run_experiment.sh first (then python3 scripts/plot.py)."
 else

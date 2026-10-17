@@ -9,6 +9,11 @@ All scripts are bash/python3, read binaries from `tests/bin/` (override with `BI
 | `helgrind.sh` | `valgrind --tool=helgrind` on the 5 binaries in `BINS` (bank sem_sq philo_naive gate philo_ordered); does it print "lock order"? | `results/helgrind.csv`, `results/helgrind/*.log` |
 | `plot.py` | Hang-rate charts with 95% Wilson CIs, overhead chart, summary table on stdout | `results/hangrate_<binary>.png`, `results/overhead.png` |
 
+## results/ layout
+- `results/cloud/`: 4-vCPU cloud container run, 200 runs/config.
+- `results/wsl2/`: Core Ultra 9 275HX laptop under WSL2, 200 runs/config.
+Each directory holds `manifest.csv`, `env.txt`, `overhead.csv`, `helgrind.csv` and the PNGs. Script defaults are unchanged (`results/`); for a new run use `OUT_DIR=results/<machine-name>` (and pass the same dir to `plot.py`). The paths in the table above are relative to the chosen output dir.
+
 ## Running
 ```
 RUNS=5 OUT_DIR=$(mktemp -d) scripts/run_experiment.sh   # smoke test, NEVER into results/ (full default: RUNS=200 per cell)
