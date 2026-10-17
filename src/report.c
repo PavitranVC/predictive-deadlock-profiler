@@ -282,3 +282,20 @@ int write_dot(const char *path) {
     fclose(f);
     return 0;
 }
+
+/* --sites output for `pdp confirm`: one line per REAL or UNDECIDED cycle,
+ *   CYCLE <n> <site1>,<site2>,... <name1>-><name2>->...-><name1>
+ * The sites are the raw module+0xoff REQ sites of the chosen edges (what the
+ * delay injector matches); the names are only for the confirm summary line. */
+void print_cycle_sites(void) {
+    int k = 0;
+    for (int i = 0; i < g.ncycles; i++) {
+        const struct cycle *c = &g.cycles[i];
+        if (verdict(c) > 1) continue;
+        printf("CYCLE %d ", ++k);
+        for (int h = 0; h < c->len; h++) printf("%s%s", h ? "," : "", g.edges[c->pick[h]].site);
+        printf(" ");
+        for (int h = 0; h <= c->len; h++) printf("%s%s", h ? "->" : "", nm(c->nodes[h % c->len]));
+        printf("\n");
+    }
+}

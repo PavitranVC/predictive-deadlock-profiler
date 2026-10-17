@@ -2,11 +2,14 @@
 # pdp - front end for the Predictive Deadlock Profiler.
 #   pdp run [-o log] ./prog args...   run prog with the interceptor, writing a log
 #   pdp analyze log [options]         analyze a log (options go to pdp-analyze)
-#   pdp confirm                       (Stage 4)
+#   pdp confirm [options] ./prog ...  re-run prog with delay injection + watchdog to confirm predicted cycles
 # Installed next to libpdp.so and pdp-analyze in build/, so we find them via our own path.
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-usage() { echo "usage: pdp run [-o log] ./prog args... | pdp analyze log [--dot f.dot] [--no-color] | pdp confirm" >&2; exit 1; }
+usage() { echo "usage: pdp run [-o log] ./prog args... | pdp analyze log [--dot f.dot] [--no-color] | pdp confirm [-n N] [-t T] [--log f] [--baseline] ./prog args..." >&2
+    echo "  confirm: predict from a SEQUENTIAL log, then confirm with a CONCURRENT run, e.g." >&2
+    echo "    pdp run -o bank.log ./tests/bin/bank seq; pdp confirm --log bank.log ./tests/bin/bank race 1" >&2
+    exit 1; }
 
 cmd_run() {
     local log=pdp.log
@@ -29,9 +32,66 @@ cmd_analyze() {
     return $rc
 }
 
+# run_batch <n> <timeout s> <sites|""> prog args...: runs the program n times with the
+# watchdog (and delays if sites is non-empty); sets DEAD, HUNG, DONE counts.
+# Exit codes: 42 = watchdog saw a wait-for cycle, 124 = timeout killed it (hung, no cycle
+# seen), anything else = the program finished on its own.
+run_batch() {
+    local n=$1 t=$2 sites=$3; shift 3
+    DEAD=0; HUNG=0; DONE=0
+    for ((i = 0; i < n; i++)); do
+        if [ -n "$sites" ]; then
+            LD_PRELOAD="$here/libpdp.so" PDP_LOG=/dev/null PDP_WATCHDOG=1 PDP_DELAY_SITE="$sites" \
+                timeout "$t" "$@" >/dev/null 2>&1
+        else
+            LD_PRELOAD="$here/libpdp.so" PDP_LOG=/dev/null PDP_WATCHDOG=1 \
+                timeout "$t" "$@" >/dev/null 2>&1
+        fi
+        case $? in
+            42)  DEAD=$((DEAD + 1)) ;;
+            124) HUNG=$((HUNG + 1)) ;;
+            *)   DONE=$((DONE + 1)) ;;
+        esac
+    done
+}
+
+cmd_confirm() {
+    local n=10 t=5 log="" baseline=0
+    while [ $# -gt 0 ]; do
+        case $1 in
+            -n) [ $# -ge 2 ] || usage; n=$2; shift 2 ;;
+            -t) [ $# -ge 2 ] || usage; t=$2; shift 2 ;;
+            --log) [ $# -ge 2 ] || usage; log=$2; shift 2 ;;
+            --baseline) baseline=1; shift ;;
+            *) break ;;
+        esac
+    done
+    [ $# -ge 1 ] || usage
+    if [ -z "$log" ]; then
+        log=pdp.log
+        cmd_run -o "$log" "$@" || echo "note: prediction run exited with status $?" >&2
+    fi
+    local lines
+    lines=$("$here/pdp-analyze" "$log" --sites) || [ $? -eq 2 ] || { echo "analysis failed" >&2; return 1; }
+    if [ -z "$lines" ]; then echo "no predicted cycle — nothing to confirm"; return 0; fi
+    local confirmed=0 tag num sites names
+    while read -r tag num sites names; do
+        run_batch "$n" "$t" "$sites" "$@"
+        local verdict="NOT CONFIRMED"
+        if [ "$DEAD" -ge 1 ]; then verdict=CONFIRMED; confirmed=1; fi
+        echo "cycle $num (${names//->/ -> }): deadlocked $DEAD/$n, hung $HUNG, completed $DONE -> $verdict"
+        if [ "$baseline" -eq 1 ]; then
+            run_batch "$n" "$t" "" "$@"
+            echo "  baseline (no delay): deadlocked $DEAD/$n, hung $HUNG, completed $DONE"
+        fi
+    done <<<"$lines"
+    [ "$confirmed" -eq 1 ] && return 2
+    return 0
+}
+
 case "$1" in
     run)     shift; cmd_run "$@" ;;
     analyze) shift; cmd_analyze "$@" ;;
-    confirm) echo "not implemented yet (Stage 4)" ;;
+    confirm) shift; cmd_confirm "$@" ;;
     *)       usage ;;
 esac

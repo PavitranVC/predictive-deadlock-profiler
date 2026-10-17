@@ -180,6 +180,8 @@ static int first_object(struct dl_phdr_info *i, size_t sz, void *arg) {
     return 1;                                   /* stop after the first */
 }
 
+static void parse_stage4_env(void);             /* defined with the Stage 4 code below */
+
 /* Resolve real functions once. in_hook doubles as the "initializing" flag: if
  * dlsym/open ever reached a hooked function, that call sees in_hook=1, skips
  * logging and returns early here instead of recursing. The process is still
@@ -202,15 +204,121 @@ static void pdp_init(void) {
     char hdr[640];
     int len = snprintf(hdr, sizeof hdr, "# pdp v%d pid=%d exe=%s\n", PDP_VERSION, (int)getpid(), exe_path);
     if (log_fd >= 0 && len > 0) { ssize_t w = write(log_fd, hdr, len); (void)w; }
+    parse_stage4_env();
     inited = 1;
     in_hook = 0;
 }
 __attribute__((constructor)) static void pdp_ctor(void) { pdp_init(); }
 
+/* ---------- Stage 4a: delay injection (PDP_DELAY_SITE) ---------- */
+
+#define MAX_DELAY_SITES 16
+static char  delay_buf[1024];                   /* private copy of the env string (strtok edits it) */
+static char *delay_sites[MAX_DELAY_SITES];
+static int   n_delay_sites;
+static useconds_t delay_us = 100000;
+
+/* Parse all Stage 4 env vars once in init. Split on commas in place; extra sites are ignored. */
+static int watchdog_on;
+static void parse_stage4_env(void) {
+    const char *wd = getenv("PDP_WATCHDOG");
+    watchdog_on = wd && strcmp(wd, "1") == 0;
+    const char *list = getenv("PDP_DELAY_SITE"), *us = getenv("PDP_DELAY_US");
+    if (us && atoi(us) > 0) delay_us = (useconds_t)atoi(us);
+    if (!list) return;
+    snprintf(delay_buf, sizeof delay_buf, "%s", list);
+    for (char *p = strtok(delay_buf, ","); p && n_delay_sites < MAX_DELAY_SITES; p = strtok(NULL, ","))
+        delay_sites[n_delay_sites++] = p;
+}
+
+/* WHY sleep only when the thread already holds a lock and BEFORE the real lock:
+ * a deadlock cycle needs thread 1 to hold lock A while thread 2 holds B, then
+ * each asks for the other's. Sleeping at the second request, while still
+ * holding the first lock, gives the other thread time to grab its first lock.
+ * This is "after the first lock" in DeadlockFuzzer terms. */
+static void maybe_delay(struct tcb *t, void *ret) {
+    if (n_delay_sites == 0 || !t || t->nheld == 0) return;
+    char site[640];
+    site_str(ret, site, sizeof site);
+    for (int i = 0; i < n_delay_sites; i++)
+        if (strcmp(site, delay_sites[i]) == 0) { usleep(delay_us); return; }
+}
+
+/* ---------- Stage 4b: watchdog (PDP_WATCHDOG=1) ---------- */
+
+static volatile int watchdog_started;
+
+/* Follow "waits for lock -> owner thread -> waits for ..." from slot `start`.
+ * Returns the slot where the chain closes a loop, or -1 if it ends. */
+static int chain_loop(const struct tcb *snap, int start) {
+    char seen[MAX_THREADS] = {0};
+    int cur = start;
+    while (cur >= 0 && snap[cur].tid && snap[cur].waiting_on) {
+        if (seen[cur]) return cur;
+        seen[cur] = 1;
+        int owner = -1;
+        for (int j = 0; j < MAX_THREADS && owner < 0; j++)
+            for (int k = 0; k < snap[j].nheld; k++)
+                if (snap[j].held[k] == snap[cur].waiting_on) { owner = j; break; }
+        cur = owner;
+    }
+    return -1;
+}
+
+/* Report the loop beginning at slot `at`, then terminate. WHY _exit: the
+ * deadlocked threads can never finish, so the only recovery is to end the
+ * process. Only write()/_exit() here: no hooked function may be called. */
+static void report_and_die(const struct tcb *snap, int at) {
+    char tids[256] = "", locks[512] = "", buf[900];
+    size_t a = 0, b = 0;
+    int cur = at;
+    do {
+        int owner = -1;
+        for (int j = 0; j < MAX_THREADS && owner < 0; j++)
+            for (int k = 0; k < snap[j].nheld; k++)
+                if (snap[j].held[k] == snap[cur].waiting_on) { owner = j; break; }
+        if (a < sizeof tids - 24) a += snprintf(tids + a, sizeof tids - a, "%s%d", a ? "," : "", (int)snap[cur].tid);
+        if (b < sizeof locks - 24) b += snprintf(locks + b, sizeof locks - b, "%s%p", b ? "," : "", snap[cur].waiting_on);
+        cur = owner;
+    } while (cur != at && cur >= 0);
+    int len = snprintf(buf, sizeof buf, "# pdp DEADLOCK tids=%s locks=%s\n", tids, locks);
+    if (len > 0) {
+        if (log_fd >= 0) { ssize_t w = write(log_fd, buf, len); (void)w; }
+        ssize_t w = write(2, buf, len); (void)w;
+    }
+    _exit(PDP_EXIT_DEADLOCK);
+}
+
+static void *watchdog_main(void *arg) {
+    (void)arg;
+    struct tcb snap[MAX_THREADS];
+    for (;;) {
+        usleep(50000);
+        tbl_acquire();                          /* hold the spin lock only for the copy */
+        memcpy(snap, pdp_threads, sizeof snap);
+        tbl_release();
+        for (int i = 0; i < MAX_THREADS; i++) {
+            int at = chain_loop(snap, i);
+            if (at >= 0) report_and_die(snap, at);
+        }
+    }
+    return NULL;
+}
+
+/* WHY lazily and not in the constructor: the constructor runs before main()
+ * while the runtime is still starting up, and programs that never lock would
+ * get a useless thread. The atomic exchange makes sure only one thread starts it. */
+static void start_watchdog_once(void) {
+    if (!watchdog_on || __sync_lock_test_and_set(&watchdog_started, 1)) return;
+    pthread_t th;
+    if (pthread_create(&th, NULL, watchdog_main, NULL) == 0) pthread_detach(th);
+}
+
 /* Mark thread as waiting (under the table lock, so a watchdog sees a consistent
  * snapshot) and log REQ. Shared by mutex lock and sem_wait. */
 static void begin_wait(struct tcb *t, char kind, void *addr, void *ret) {
-    /* STAGE 4 HOOK POINT: delay injection goes here (PDP_DELAY_SITE). Comment only. */
+    start_watchdog_once();
+    maybe_delay(t, ret);
     if (t) { tbl_acquire(); t->waiting_on = addr; tbl_release(); }
     log_event(t, "REQ", kind, addr, ret, 0);
 }

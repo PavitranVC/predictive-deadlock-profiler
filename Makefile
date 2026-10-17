@@ -25,6 +25,7 @@ test: all
 	@bash tests/check_basic.sh
 	@bash tests/check_analyze.sh
 	@bash tests/check_suite.sh
+	@bash tests/check_confirm.sh
 
 clean:
 	rm -rf build tests/bin

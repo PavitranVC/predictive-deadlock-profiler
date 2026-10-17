@@ -52,5 +52,5 @@ t2=$(grep -n 'SITE_T2' tests/bank.c | head -1 | cut -d: -f1)
 for text in "REAL" "bank.c:$t1" "bank.c:$t2" "acct_a" "acct_b" "acct_a -> acct_b -> acct_a"; do
     grep -qF -- "$text" <<<"$out" || fail "bank report lacks '$text'"
 done
-[ "$(./build/pdp confirm)" = "not implemented yet (Stage 4)" ] || fail "pdp confirm message"
+./build/pdp confirm 2>/dev/null; [ $? -eq 1 ] || fail "pdp confirm without a program should print usage (exit 1)"
 echo PASS

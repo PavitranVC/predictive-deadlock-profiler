@@ -57,6 +57,7 @@ void report_init(int use_color);
 void name_locks(void);
 void print_report(void);
 void print_fix(void);
+void print_cycle_sites(void);
 int  write_dot(const char *path);
 
 #endif

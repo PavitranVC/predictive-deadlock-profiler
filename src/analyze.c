@@ -310,14 +310,15 @@ static void classify(struct cycle *c) {
 
 int main(int argc, char **argv) {
     const char *log = NULL, *dot = NULL;
-    int no_color = 0;
+    int no_color = 0, sites = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--no-color") == 0) no_color = 1;
+        else if (strcmp(argv[i], "--sites") == 0) sites = 1;
         else if (strcmp(argv[i], "--dot") == 0 && i + 1 < argc) dot = argv[++i];
         else if (argv[i][0] != '-' && !log) log = argv[i];
         else { fprintf(stderr, "unknown argument: %s\n", argv[i]); log = NULL; break; }
     }
-    if (!log) { fprintf(stderr, "usage: pdp-analyze <logfile> [--dot report.dot] [--no-color]\n"); return 1; }
+    if (!log) { fprintf(stderr, "usage: pdp-analyze <logfile> [--dot report.dot] [--no-color] [--sites]\n"); return 1; }
 
     int n = 0;
     struct event *evs = read_log(log, &n);
@@ -329,8 +330,8 @@ int main(int argc, char **argv) {
 
     report_init(!no_color && !getenv("NO_COLOR") && isatty(STDOUT_FILENO));
     name_locks();
-    print_report();
-    print_fix();
+    if (sites) print_cycle_sites();          /* machine-readable mode replaces the report */
+    else { print_report(); print_fix(); }
     if (dot && write_dot(dot) != 0) return 1;
 
     for (int i = 0; i < g.ncycles; i++) if (g.cycles[i].real || g.cycles[i].capped) return 2;

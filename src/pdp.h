@@ -30,6 +30,7 @@
  *   # pdp WARN overflow tid=<tid> what=threads|held    (once per thread and kind)
  * A thread's table slot is freed when it exits, so "threads" means more than
  * MAX_THREADS threads were alive AT THE SAME TIME.
+ *   # pdp DEADLOCK tids=t1,t2,.. locks=l1,l2,..    written by the watchdog (see below)
  * Lines may appear slightly out of seq order; the analyzer must sort by seq.
  *
  * Site offsets: site = (return address - 1) - load base of the module, so
@@ -44,6 +45,16 @@
  *
  * Paths containing spaces are not supported in the exe=/site fields.
  */
+/* ENVIRONMENT (libpdp.so), used by `pdp confirm`:
+ *   PDP_LOG         log file path (default pdp.log)
+ *   PDP_DELAY_SITE  comma-separated call sites ("module+0xoff", as in the log). When a
+ *                   thread that already holds a lock asks for another from one of
+ *                   these sites, it sleeps first, widening the deadlock window.
+ *   PDP_DELAY_US    sleep length in microseconds (default 100000)
+ *   PDP_WATCHDOG=1  start a thread (on the first lock call) that checks every 50 ms for
+ *                   a wait-for cycle. On finding one it writes the DEADLOCK line to
+ *                   the log and stderr and exits the process with PDP_EXIT_DEADLOCK.
+ */
 #ifndef PDP_H
 #define PDP_H
 
@@ -52,6 +63,7 @@
 #define MAX_HELD      16          /* max locks tracked per thread */
 #define PDP_LOG_ENV   "PDP_LOG"
 #define PDP_LOG_DEFAULT "pdp.log"
+#define PDP_EXIT_DEADLOCK 42      /* watchdog found a wait-for cycle */
 #define PDP_LINE_MAX  1536        /* stack buffer for one log line */
 
 #endif
