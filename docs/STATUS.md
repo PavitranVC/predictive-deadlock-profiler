@@ -10,7 +10,7 @@ Every agent reads this first and updates ONLY its own line.
 - builder: Stage 4 + bank_fixed done
 - experimenter: full 200-run experiment in progress (remote session); demo.sh done
 - docs: Stage 4 docs written (stages/stage-4.md, CHANGELOG.md entry, arch/arch-v4.dot+png, VIVA.md through Stage 4); not committed.
-- reviewer: Stage 4 reviewed -> docs/reviews/stage-4.md; 4 MUST-FIX (watchdog self-cycle false positive on signalling sems, same on recursive mutex, no watchdog negative tests, exit 42 alone trusted as deadlock), 9 SHOULD-FIX, 12 NIT.
+- reviewer: Stage 5/6 reviewed -> docs/reviews/stage-5-6.md; 4 MUST-FIX (INT/TERM trap resumes loop and mislabels loaded runs, results CSVs overwritten, overhead ignores exit status, overhead timing ms-quantised/conflates startup), 11 SHOULD-FIX, 10 NIT.
 
 ## Blockers
 - (none)
