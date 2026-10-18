@@ -54,7 +54,7 @@ To run the experiment (native programs, no PDP, counting hangs):
 
 ```
 RUNS=5 OUT_DIR=$(mktemp -d) scripts/run_experiment.sh   # smoke test; never write a smoke test into results/
-sudo -E scripts/run_experiment.sh                       # full run: 10,800 runs, takes hours
+sudo -E TIMEOUT_S=1 scripts/run_experiment.sh           # full run: 10,800 runs, ~1.5 h on the cloud VM, same 1 s timeout as the committed results
 python3 scripts/plot.py                                 # hang-rate charts and summary
 ```
 
