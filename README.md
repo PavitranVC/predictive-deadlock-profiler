@@ -48,7 +48,7 @@ cycle 1 (acct_a -> acct_b -> acct_a): deadlocked 10/10, hung 0, completed 0 -> C
   baseline (no delay): deadlocked 0/10, hung 0, completed 10
 ```
 
-(Output trimmed; thread ids vary between runs.) For the live walkthrough used in the viva, run `scripts/demo.sh` (`DEMO_NOPAUSE=1` runs it straight through).
+(Output trimmed; thread ids vary between runs.) For the live walkthrough used in the viva, run `scripts/demo.sh` (`DEMO_NOPAUSE=1` runs it straight through). One command for the whole viva (preflight, demo, summary): `scripts/present.sh` (`--nopause`, `--check`).
 
 To run the experiment (native programs, no PDP, counting hangs):
 
